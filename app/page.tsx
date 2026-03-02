@@ -1,117 +1,166 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useDispatch, useSelector } from "react-redux";
+import { RootState } from "@/lib/store/store";
+import {
+  loginStart,
+  otpSentSuccess,
+  loginSuccess,
+  loginFailure,
+  setTempIdentifier,
+  resetAuth,
+} from "@/lib/store/slices/authSlice";
+import { authApi } from "@/lib/api/auth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 
-export default function Home() {
+export default function LoginPage() {
   const router = useRouter();
+  const dispatch = useDispatch();
+  const { isAuthenticated, loading, error, otpSent, tempIdentifier } = useSelector(
+    (state: RootState) => state.auth,
+  );
 
-  const handleServiceClick = (serviceId: string) => {
-    // For now, simpler navigation or opening modal
-    // In Snabbit, this usually opens a sub-category page or modal
-    router.push(`/services?category=${serviceId}`);
+  const [identifier, setIdentifier] = useState("");
+  const [otp, setOtp] = useState("");
+
+  if (isAuthenticated) {
+    router.replace("/dashboard");
+    return null;
+  }
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    dispatch(loginStart());
+    try {
+      await authApi.sendOtp(identifier);
+      dispatch(setTempIdentifier(identifier));
+      dispatch(otpSentSuccess());
+    } catch (err: unknown) {
+      dispatch(loginFailure(err instanceof Error ? err.message : "Failed to send OTP"));
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    dispatch(loginStart());
+    try {
+      const response = await authApi.verifyOtp({
+        identifier: tempIdentifier || identifier,
+        code: otp,
+      });
+      dispatch(
+        loginSuccess({
+          user: {
+            id: response.user.id,
+            firstName: response.user.firstName,
+            lastName: response.user.lastName,
+            mobile: response.user.phone,
+            email: response.user.email,
+            status: response.user.status,
+            isExpert: response.user.isExpert,
+          },
+          token: response.accessToken,
+        }),
+      );
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      dispatch(loginFailure(err instanceof Error ? err.message : "Invalid OTP"));
+    }
   };
 
   return (
-    <main className="min-h-screen bg-background md:bg-muted/10">
-      <div className="space-y-2 md:space-y-8 pb-24 md:pb-12 bg-background md:bg-transparent">
-        {/* Trust/Social Proof Section (Filler for now to add page weight) */}
-        <section className="py-8 md:py-12">
-          <div className="page-container">
-            <div className="bg-primary/5 rounded-2xl p-6 md:p-12 text-center">
-              <h3 className="text-xl md:text-3xl font-bold text-[#1C8AFF] mb-3">
-                Trusted by 6,000+ Users
-              </h3>
-              <p className="text-muted-foreground max-w-xl mx-auto mb-6 flex flex-col">
-                <span>
-                  From improving CIBIL, credit score, loan guidance, taxation &
-                  filing to investment like SIPs, mutual funds, stocks & gold.
-                </span>
-                <span>Book expert help in 10 minutes.</span>
-              </p>
-              <div className="flex flex-wrap justify-center gap-8 md:gap-16 pt-4">
-                {/* Stat 1 */}
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/50 flex items-center justify-center text-[#1C8AFF]">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="w-5 h-5 md:w-6 md:h-6"
-                    >
-                      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <path d="M12 13v5" />
-                      <path d="M12 18l3-3" />
-                      <path d="M12 18l-3-3" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div className="text-2xl md:text-3xl font-bold text-foreground">
-                      5k+
-                    </div>
-                    <div className="text-xs md:text-sm text-muted-foreground font-medium tracking-wider">
-                      Services Completed
-                    </div>
-                  </div>
-                </div>
-
-                {/* Stat 2 */}
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/50 flex items-center justify-center text-[#1C8AFF]">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="w-5 h-5 md:w-6 md:h-6"
-                    >
-                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                      <circle cx="9" cy="7" r="4" />
-                      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div className="text-2xl md:text-3xl font-bold text-foreground">
-                      1000+
-                    </div>
-                    <div className="text-xs md:text-sm text-muted-foreground font-medium tracking-wider">
-                      Verified Experts
-                    </div>
-                  </div>
-                </div>
-
-                {/* Stat 3 */}
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/50 flex items-center justify-center text-[#1C8AFF]">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      stroke="none"
-                      className="w-5 h-5 md:w-6 md:h-6 text-yellow-400"
-                    >
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div className="text-2xl md:text-3xl font-bold text-foreground">
-                      4.9/5
-                    </div>
-                    <div className="text-xs md:text-sm text-muted-foreground font-medium tracking-wider">
-                      Customer Rating
-                    </div>
-                  </div>
-                </div>
-              </div>
+    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
+              A
             </div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              AIPE <span className="text-primary">Expert</span>
+            </h1>
           </div>
-        </section>
+          <p className="text-muted-foreground">
+            Sign in to your expert portal to manage bookings and earnings
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl">
+              {otpSent ? "Verify OTP" : "Sign In"}
+            </CardTitle>
+            <CardDescription>
+              {otpSent
+                ? `Enter the OTP sent to ${tempIdentifier}`
+                : "Enter your registered mobile number"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!otpSent ? (
+              <form onSubmit={handleSendOtp} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="identifier">Mobile Number</Label>
+                  <Input
+                    id="identifier"
+                    type="tel"
+                    placeholder="Enter your mobile number"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    required
+                  />
+                </div>
+                {error && (
+                  <p className="text-sm text-destructive">{error}</p>
+                )}
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Send OTP
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyOtp} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="otp">OTP Code</Label>
+                  <Input
+                    id="otp"
+                    type="text"
+                    placeholder="Enter 6-digit OTP"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    maxLength={6}
+                    required
+                  />
+                </div>
+                {error && (
+                  <p className="text-sm text-destructive">{error}</p>
+                )}
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Verify & Sign In
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => {
+                    dispatch(resetAuth());
+                    setOtp("");
+                  }}
+                >
+                  Change Number
+                </Button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
       </div>
-    </main>
+    </div>
   );
 }

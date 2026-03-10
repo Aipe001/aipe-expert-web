@@ -15,16 +15,21 @@ import {
 import { authApi } from "@/lib/api/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
   const dispatch = useDispatch();
-  const { isAuthenticated, loading, error, otpSent, tempIdentifier } = useSelector(
-    (state: RootState) => state.auth,
-  );
+  const { isAuthenticated, loading, error, otpSent, tempIdentifier } =
+    useSelector((state: RootState) => state.auth);
 
   const [identifier, setIdentifier] = useState("");
   const [otp, setOtp] = useState("");
@@ -42,7 +47,9 @@ export default function LoginPage() {
       dispatch(setTempIdentifier(identifier));
       dispatch(otpSentSuccess());
     } catch (err: unknown) {
-      dispatch(loginFailure(err instanceof Error ? err.message : "Failed to send OTP"));
+      dispatch(
+        loginFailure(err instanceof Error ? err.message : "Failed to send OTP"),
+      );
     }
   };
 
@@ -70,7 +77,9 @@ export default function LoginPage() {
       );
       router.push("/dashboard");
     } catch (err: unknown) {
-      dispatch(loginFailure(err instanceof Error ? err.message : "Invalid OTP"));
+      dispatch(
+        loginFailure(err instanceof Error ? err.message : "Invalid OTP"),
+      );
     }
   };
 
@@ -79,11 +88,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#1C8AFF] text-primary-foreground font-bold">
               A
             </div>
             <h1 className="text-2xl font-bold tracking-tight">
-              AIPE <span className="text-primary">Expert</span>
+              AIPE <span className="text-[#1C8AFF]">Expert</span>
             </h1>
           </div>
           <p className="text-muted-foreground">
@@ -116,9 +125,7 @@ export default function LoginPage() {
                     required
                   />
                 </div>
-                {error && (
-                  <p className="text-sm text-destructive">{error}</p>
-                )}
+                {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Send OTP
@@ -138,9 +145,7 @@ export default function LoginPage() {
                     required
                   />
                 </div>
-                {error && (
-                  <p className="text-sm text-destructive">{error}</p>
-                )}
+                {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Verify & Sign In

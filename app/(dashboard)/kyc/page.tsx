@@ -80,7 +80,8 @@ export default function KycPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">KYC Verification</h1>
         <p className="text-muted-foreground">
-          Submit your identity documents for verification to start accepting bookings.
+          Submit your identity documents for verification to start accepting
+          bookings.
         </p>
       </div>
 
@@ -105,7 +106,7 @@ export default function KycPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-primary" />
+              <ShieldCheck className="h-5 w-5 text-[#1C8AFF]" />
               <CardTitle className="text-lg">Identity Verification</CardTitle>
             </div>
             {kycStatus && (
@@ -255,10 +256,12 @@ export default function KycPage() {
               />
             </div>
 
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
+            <Button
+              type="submit"
+              className="w-full bg-[#1C8AFF]"
+              disabled={submitting}
+            >
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Submit KYC Documents
             </Button>
           </form>

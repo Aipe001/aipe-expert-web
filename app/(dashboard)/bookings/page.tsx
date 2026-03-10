@@ -182,8 +182,8 @@ export default function BookingsPage() {
                 <Card key={req.id} className="overflow-hidden">
                   <CardContent className="p-4">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                        <User className="h-6 w-6 text-primary" />
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#1C8AFF]/10">
+                        <User className="h-6 w-6 text-[#1C8AFF]" />
                       </div>
                       <div className="flex-1 min-w-0 space-y-1">
                         <div className="flex items-center gap-2">

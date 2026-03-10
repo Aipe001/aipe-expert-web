@@ -21,7 +21,10 @@ export default function NotFound() {
         <p className="mb-4 text-xl text-muted-foreground">
           Oops! Page not found
         </p>
-        <Link href="/" className="text-primary underline hover:text-primary/90">
+        <Link
+          href="/"
+          className="text-[#1C8AFF] underline hover:text-[#1C8AFF]/90"
+        >
           Return to Home
         </Link>
       </div>

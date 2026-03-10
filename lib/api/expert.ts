@@ -44,11 +44,16 @@ export const expertApi = {
     return apiClient<OnboardingStatus>("/expert-onboarding/status");
   },
 
-  submitKyc: async (data: SubmitKycDto): Promise<{ message: string; onboardingStep: number }> => {
-    return apiClient<{ message: string; onboardingStep: number }>("/expert-onboarding/kyc", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
+  submitKyc: async (
+    data: SubmitKycDto,
+  ): Promise<{ message: string; onboardingStep: number }> => {
+    return apiClient<{ message: string; onboardingStep: number }>(
+      "/expert-onboarding/kyc",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    );
   },
 
   getEarningsStats: async (): Promise<EarningsStats> => {
@@ -59,11 +64,13 @@ export const expertApi = {
     return apiClient<WalletInfo>("/experts/wallet");
   },
 
-  getTransactions: async (): Promise<Transaction[]> => {
-    return apiClient<Transaction[]>("/experts/transactions");
-  },
+  // getTransactions: async (): Promise<Transaction[]> => {
+  //   return apiClient<Transaction[]>("/experts/transactions");  // this api doesnt exist
+  // },
 
-  requestWithdrawal: async (data: WithdrawalRequest): Promise<{ message: string }> => {
+  requestWithdrawal: async (
+    data: WithdrawalRequest,
+  ): Promise<{ message: string }> => {
     return apiClient<{ message: string }>("/experts/withdraw", {
       method: "POST",
       body: JSON.stringify(data),

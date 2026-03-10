@@ -12,13 +12,7 @@ import {
   BookingRequest,
   Booking,
 } from "@/lib/api/bookings";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -196,7 +190,10 @@ export default function BookingsPage() {
                           <p className="font-medium truncate">
                             {req.customer?.firstName} {req.customer?.lastName}
                           </p>
-                          <Badge variant="secondary" className={statusColor(req.status)}>
+                          <Badge
+                            variant="secondary"
+                            className={statusColor(req.status)}
+                          >
                             {req.status}
                           </Badge>
                         </div>
@@ -278,14 +275,17 @@ export default function BookingsPage() {
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">
-                          {req.customer?.firstName} {req.customer?.lastName} &mdash;{" "}
-                          {req.service?.name || "Service"}
+                          {req.customer?.firstName} {req.customer?.lastName}{" "}
+                          &mdash; {req.service?.name || "Service"}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {new Date(req.createdAt).toLocaleDateString("en-IN")}
                         </p>
                       </div>
-                      <Badge variant="secondary" className={statusColor(req.status)}>
+                      <Badge
+                        variant="secondary"
+                        className={statusColor(req.status)}
+                      >
                         {req.status}
                       </Badge>
                     </div>

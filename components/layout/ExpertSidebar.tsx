@@ -20,7 +20,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -34,6 +33,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image";
 
 const navItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -74,28 +75,64 @@ export function ExpertSidebar() {
   const pathname = usePathname();
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { state, isMobile } = useSidebar();
 
   const initials =
     (user?.firstName?.[0] || "") + (user?.lastName?.[0] || "") || "EX";
 
   return (
     <Sidebar collapsible="icon" variant="sidebar">
-      <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-              A
-            </div>
-            <span className="text-lg font-bold tracking-tight truncate group-data-[collapsible=icon]:hidden">
-              AIPE <span className="text-primary">Expert</span>
-            </span>
-          </div>
+      <SidebarHeader className="border-b border-sidebar-border px-3 py-3 h-14 flex items-center justify-between overflow-hidden">
+        <div className="flex items-center gap-2 min-w-0 relative h-8 w-full">
+          <AnimatePresence mode="wait">
+            {state === "expanded" || isMobile ? (
+              <motion.div
+                key="expanded-logo"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="flex items-center gap-2"
+              >
+                <div className="relative h-8 w-32 shrink-0">
+                  <Image
+                    src="/aipe_logo1.png"
+                    alt="AIPE Logo"
+                    fill
+                    className="object-contain"
+                    priority
+                  />
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="collapsed-logo"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="flex items-center justify-center w-8 h-8"
+              >
+                <Image
+                  src="/aipe_logo2.png"
+                  alt="AIPE Icon"
+                  width={32}
+                  height={32}
+                  className="object-contain"
+                  priority
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <div className="group-data-[collapsible=icon]:opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
+          <CollapseToggle />
         </div>
       </SidebarHeader>
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => {
@@ -110,8 +147,12 @@ export function ExpertSidebar() {
                       tooltip={item.title}
                     >
                       <Link href={item.href}>
-                        <item.icon className={isActive ? "text-primary" : ""} />
-                        <span>{item.title}</span>
+                        <item.icon
+                          className={isActive ? "text-primary " : ""}
+                        />
+                        <span className="group-data-[collapsible=icon]:opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
+                          {item.title}
+                        </span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -122,26 +163,26 @@ export function ExpertSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border">
+      <SidebarFooter className="border-t border-sidebar-border pb-1">
         <SidebarMenu>
-          <SidebarMenuItem>
+          <SidebarMenuItem className="-ml-1.5">
             <SidebarMenuButton tooltip={user?.firstName || "Expert"} size="lg">
               <Avatar className="h-7 w-7 shrink-0">
-                <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                <AvatarFallback className="text-xs bg-[#1C8AFF]/10 text-[#1C8AFF]">
                   {initials}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex flex-col text-left text-xs leading-tight min-w-0 group-data-[collapsible=icon]:hidden">
+              <div className="flex flex-col text-left text-xs leading-tight min-w-0 group-data-[collapsible=icon]:opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
                 <span className="font-medium truncate">
                   {user?.firstName} {user?.lastName}
                 </span>
-                <span className="text-muted-foreground truncate">
+                <span className="text-sm text-muted-foreground truncate">
                   {user?.email || user?.mobile}
                 </span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem>
+          <SidebarMenuItem className="px-0.5">
             <SidebarMenuButton
               tooltip="Sign Out"
               onClick={() => {
@@ -150,7 +191,9 @@ export function ExpertSidebar() {
               }}
             >
               <LogOut className="shrink-0" />
-              <span>Sign Out</span>
+              <span className="group-data-[collapsible=icon]:opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
+                Sign Out
+              </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

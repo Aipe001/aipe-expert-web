@@ -99,6 +99,10 @@ export const expertApi = {
     return apiClient<EarningsStats>("/experts/statistics");
   },
 
+  getTransactions: async (): Promise<Transaction[]> => {
+    return apiClient<Transaction[]>("/wallet/transactions");
+  },
+
   getWallet: async (): Promise<WalletInfo> => {
     return apiClient<WalletInfo>("/experts/wallet");
   },

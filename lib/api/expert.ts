@@ -39,6 +39,45 @@ export interface WithdrawalRequest {
   amount: number;
 }
 
+// ── KYC Templates & Submissions (new system) ────────────────
+export interface KycDocumentTypeDef {
+  id: string;
+  name: string;
+  code: string;
+  allowedFileTypes: string[];
+  sides: "front_only" | "front_and_back" | "single";
+}
+
+export interface KycTemplateStep {
+  id: string;
+  stepOrder: number;
+  name: string;
+  description?: string;
+  documentTypeId?: string;
+  documentType?: KycDocumentTypeDef;
+  fieldType: string;
+  required: boolean;
+  options?: string[];
+}
+
+export interface KycTemplate {
+  id: string;
+  name: string;
+  kycType: "expert" | "bank_approval" | "category_service";
+  description?: string;
+  isActive: boolean;
+  steps: KycTemplateStep[];
+}
+
+export interface KycSubmission {
+  id: string;
+  kycTemplateId: string;
+  status: "draft" | "submitted" | "under_review" | "approved" | "rejected";
+  rejectionReason?: string;
+  reviewNote?: string;
+  submittedAt?: string;
+}
+
 export const expertApi = {
   getOnboardingStatus: async (): Promise<OnboardingStatus> => {
     return apiClient<OnboardingStatus>("/expert-onboarding/status");
@@ -64,10 +103,6 @@ export const expertApi = {
     return apiClient<WalletInfo>("/experts/wallet");
   },
 
-  // getTransactions: async (): Promise<Transaction[]> => {
-  //   return apiClient<Transaction[]>("/experts/transactions");  // this api doesnt exist
-  // },
-
   requestWithdrawal: async (
     data: WithdrawalRequest,
   ): Promise<{ message: string }> => {
@@ -76,4 +111,31 @@ export const expertApi = {
       body: JSON.stringify(data),
     });
   },
+
+  // ── KYC Templates & Submissions (new system) ────────────────
+  getKycTemplateByType: async (kycType: string): Promise<KycTemplate | null> => {
+    const templates = await apiClient<KycTemplate[]>(`/kyc-templates?kycType=${kycType}`);
+    return templates.find((t) => t.isActive) || null;
+  },
+
+  getMyKycSubmissions: async (): Promise<KycSubmission[]> => {
+    return apiClient<KycSubmission[]>("/kyc-submissions/my");
+  },
+
+  submitKycSubmission: async (data: {
+    kycTemplateId: string;
+    targetId?: string;
+    documents: Array<{
+      kycTemplateStepId: string;
+      fieldValue?: string;
+      documentFrontUrl?: string;
+      documentBackUrl?: string;
+    }>;
+  }): Promise<{ message: string }> => {
+    return apiClient<{ message: string }>("/kyc-submissions/submit", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };
+

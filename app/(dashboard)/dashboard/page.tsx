@@ -5,70 +5,56 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSelector } from "react-redux";
 import { RootState } from "@/lib/store/store";
-import { expertApi, EarningsStats, Transaction } from "@/lib/api/expert";
+import { expertApi, EarningsStats } from "@/lib/api/expert";
 import {
   getExpertBookingRequests,
-  acceptBookingRequest,
-  rejectBookingRequest,
+  getExpertBookings,
   BookingRequest,
+  Booking,
 } from "@/lib/api/bookings";
+import { Card, CardContent } from "@/components/ui/card";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  IndianRupee,
-  TrendingUp,
   Star,
-  CalendarCheck,
-  ArrowUpRight,
-  ArrowDownRight,
-  ArrowRight,
-  Clock,
-  Check,
-  X,
-  Loader2,
-  User,
+  Power,
+  Video,
   FileText,
-  Inbox,
+  Calendar,
+  CheckCircle2,
+  Users,
+  Wallet,
+  ChevronRight,
 } from "lucide-react";
-import { toast } from "sonner";
+import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useSelector(
     (state: RootState) => state.auth,
   );
+  
   const [stats, setStats] = useState<EarningsStats | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [requests, setRequests] = useState<BookingRequest[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
+  const [isOnline, setIsOnline] = useState(false);
 
-  const fetchRequests = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const res = await getExpertBookingRequests();
-      setRequests(res);
-    } catch {
-      // API may not be ready
+      const [statsRes, reqRes, bookRes] = await Promise.allSettled([
+        expertApi.getEarningsStats(),
+        getExpertBookingRequests(),
+        getExpertBookings(),
+      ]);
+
+      if (statsRes.status === "fulfilled") setStats(statsRes.value);
+      if (reqRes.status === "fulfilled") setRequests(reqRes.value);
+      if (bookRes.status === "fulfilled") setBookings(bookRes.value);
+    } catch (err) {
+      console.error("Dashboard data fetch failed", err);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -77,407 +63,216 @@ export default function DashboardPage() {
       router.replace("/");
       return;
     }
-
-    const fetchData = async () => {
-      try {
-        const [statsRes, txRes] = await Promise.allSettled([
-          expertApi.getEarningsStats(),
-          expertApi.getTransactions(),
-        ]);
-
-        if (statsRes.status === "fulfilled") setStats(statsRes.value);
-        if (txRes.status === "fulfilled") setTransactions(txRes.value);
-      } catch {
-        // Stats may not be implemented yet
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
-    fetchRequests();
-  }, [isAuthenticated, router, fetchRequests]);
+  }, [isAuthenticated, router, fetchData]);
 
-  const pendingRequests = requests.filter(
-    (r) => r.status.toLowerCase() === "pending",
-  );
+  // Derived counts
+  const requestedCount = requests.filter(r => r.status.toLowerCase() === "pending").length;
+  const activeCount = bookings.filter(b => ["started", "in_progress"].includes(b.status.toLowerCase())).length;
+  const upcomingCount = bookings.filter(b => ["scheduled", "confirmed"].includes(b.status.toLowerCase())).length;
+  const completedCount = stats?.completedConsultations ?? bookings.filter(b => b.status.toLowerCase() === "completed").length;
 
-  const handleAccept = async (id: string) => {
-    setActionLoading(id);
-    try {
-      await acceptBookingRequest(id);
-      toast.success("Booking request accepted!");
-      await fetchRequests();
-    } catch (err: unknown) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to accept request",
-      );
-    } finally {
-      setActionLoading(null);
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
     }
   };
 
-  const handleReject = async () => {
-    if (!rejectingId) return;
-    setActionLoading(rejectingId);
-    try {
-      await rejectBookingRequest(rejectingId, rejectReason || undefined);
-      toast.success("Booking request rejected");
-      setRejectDialogOpen(false);
-      setRejectingId(null);
-      setRejectReason("");
-      await fetchRequests();
-    } catch (err: unknown) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to reject request",
-      );
-    } finally {
-      setActionLoading(null);
-    }
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { y: 0, opacity: 1 }
   };
-
-  const statCards = [
-    {
-      title: "Total Earnings",
-      value: stats?.totalEarnings !== undefined ? `₹${stats.totalEarnings.toLocaleString()}` : "₹0",
-      description: "Lifetime earnings",
-      icon: IndianRupee,
-      color: "text-green-600",
-      bg: "bg-green-50",
-    },
-    {
-      title: "This Month",
-      value: stats?.monthlyEarnings !== undefined ? `₹${stats.monthlyEarnings.toLocaleString()}` : "₹0",
-      description: "Current month",
-      icon: TrendingUp,
-      color: "text-blue-600",
-      bg: "bg-blue-50",
-    },
-    {
-      title: "Pending Payout",
-      value: stats?.pendingPayout !== undefined ? `₹${stats.pendingPayout.toLocaleString()}` : "₹0",
-      description: "Awaiting transfer",
-      icon: Clock,
-      color: "text-orange-600",
-      bg: "bg-orange-50",
-    },
-    {
-      title: "Consultations",
-      value: stats?.completedConsultations?.toString() || "0",
-      description: "Completed",
-      icon: CalendarCheck,
-      color: "text-purple-600",
-      bg: "bg-purple-50",
-    },
-    {
-      title: "Rating",
-      value: stats?.rating ? `${stats.rating.toFixed(1)}/5` : "N/A",
-      description: `${stats?.totalReviews || 0} reviews`,
-      icon: Star,
-      color: "text-yellow-600",
-      bg: "bg-yellow-50",
-    },
-  ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Welcome back, {user?.firstName || "Expert"}
+    <motion.div 
+      className="max-w-6xl mx-auto space-y-8 pb-10"
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
+    >
+      {/* Welcome Header */}
+      <motion.div variants={itemVariants} className="space-y-1">
+        <h1 className="text-3xl font-bold tracking-tight">
+          Welcome <span className="text-[#1C8AFF]">&quot;{user?.firstName || "Expert"}&quot;</span>
         </h1>
-        <p className="text-muted-foreground">
-          Here&apos;s an overview of your earnings and activity.
-        </p>
-      </div>
+      </motion.div>
 
-      {/* Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {statCards.map((card) => (
-          <Card key={card.title}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {card.title}
-              </CardTitle>
-              <div className={`p-2 rounded-lg ${card.bg}`}>
-                <card.icon className={`h-4 w-4 ${card.color}`} />
+      {/* Top Row: Rating & Status */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <motion.div variants={itemVariants}>
+          <Link href="/dashboard" className="block h-full">
+            <Card className="h-full border-none shadow-sm hover:shadow-md transition-shadow cursor-pointer">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Star className="h-6 w-6 text-yellow-500 fill-yellow-500" />
+                    <span className="text-2xl font-bold">
+                      {loading ? <Skeleton className="h-8 w-12" /> : (stats?.rating?.toFixed(1) || "0.0")}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Rating</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
+        </motion.div>
+
+        <motion.div variants={itemVariants}>
+          <Card 
+            className={cn(
+              "h-full border-none shadow-sm transition-all cursor-pointer overflow-hidden",
+              isOnline ? "bg-[#1C8AFF]/5 ring-1 ring-[#1C8AFF]/20" : "bg-background"
+            )}
+            onClick={() => setIsOnline(!isOnline)}
+          >
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <motion.div
+                    animate={{ 
+                      scale: isOnline ? [1, 1.1, 1] : 1,
+                      opacity: isOnline ? 1 : 0.6
+                    }}
+                    transition={{ repeat: isOnline ? Infinity : 0, duration: 2, ease: "easeInOut" }}
+                    className={cn(
+                      "p-1 rounded-full",
+                      isOnline ? "text-[#1C8AFF] drop-shadow-[0_0_12px_rgba(28,138,255,0.7)]" : "text-muted-foreground"
+                    )}
+                  >
+                    <Power className="h-6 w-6" />
+                  </motion.div>
+                  <span className="text-lg font-bold tracking-tight uppercase">
+                    {isOnline ? "ONLINE" : "OFFLINE"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {isOnline ? "Visible to customers" : "Not visible"}
+                </p>
               </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <Skeleton className="h-8 w-24" />
-              ) : (
-                <>
-                  <div className="text-2xl font-bold">{card.value}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {card.description}
-                  </p>
-                </>
-              )}
             </CardContent>
           </Card>
-        ))}
+        </motion.div>
       </div>
 
-      {/* Incoming Requests */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+      {/* Bookings Section */}
+      <motion.div variants={itemVariants} className="space-y-4">
+        <h2 className="text-xl font-bold tracking-tight">Bookings</h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Active */}
+          <BookingCard 
+            title="Active" 
+            count={activeCount} 
+            loading={loading}
+            icon={<Video className="h-6 w-6 text-[#1C8AFF]" />} 
+            iconBg="bg-blue-50"
+            href="/bookings"
+          />
+          {/* Requested */}
+          <BookingCard 
+            title="Requested" 
+            count={requestedCount} 
+            loading={loading}
+            icon={<FileText className="h-6 w-6 text-yellow-500" />} 
+            iconBg="bg-yellow-50"
+            href="/bookings"
+          />
+          {/* Upcoming */}
+          <BookingCard 
+            title="Upcoming" 
+            count={upcomingCount} 
+            loading={loading}
+            icon={<Calendar className="h-6 w-6 text-purple-600" />} 
+            iconBg="bg-purple-50"
+            href="/bookings"
+          />
+          {/* Completed */}
+          <BookingCard 
+            title="Completed" 
+            count={completedCount} 
+            loading={loading}
+            icon={<CheckCircle2 className="h-6 w-6 text-green-600" />} 
+            iconBg="bg-green-50"
+            href="/bookings"
+          />
+        </div>
+      </motion.div>
+
+      {/* Summary Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <motion.div variants={itemVariants}>
+          <SummaryCard 
+            title="Total Service Completed" 
+            value={completedCount.toString()} 
+            loading={loading}
+            icon={<Users className="h-5 w-5 text-purple-600" />} 
+            iconBg="bg-purple-50"
+            href="/bookings"
+          />
+        </motion.div>
+        <motion.div variants={itemVariants}>
+          <SummaryCard 
+            title="Total Earning" 
+            value={`₹${stats?.totalEarnings?.toLocaleString() || "0"}`} 
+            loading={loading}
+            icon={<Wallet className="h-5 w-5 text-green-600" />} 
+            iconBg="bg-green-50"
+            href="/wallet"
+          />
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
+
+function BookingCard({ title, count, loading, icon, iconBg, href }: { title: string, count: number, loading: boolean, icon: React.ReactNode, iconBg: string, href: string }) {
+  return (
+    <Link href={href} className="block">
+      <Card className="border-none shadow-sm hover:shadow-md transition-shadow overflow-hidden group">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className={cn("p-2 rounded-lg", iconBg)}>
+              {icon}
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+          </div>
           <div className="space-y-1">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Inbox className="h-5 w-5 text-primary" />
-              Incoming Requests
-              {pendingRequests.length > 0 && (
-                <Badge className="ml-1">{pendingRequests.length}</Badge>
-              )}
-            </CardTitle>
-            <CardDescription>
-              New booking requests awaiting your response.
-            </CardDescription>
+            <div className="text-3xl font-bold">
+              {loading ? <Skeleton className="h-10 w-16" /> : count.toString().padStart(2, '0')}
+            </div>
+            <p className="text-sm text-muted-foreground">{title}</p>
           </div>
-          <Button variant="ghost" size="sm" asChild className="text-primary">
-            <Link href="/bookings">
-              View all
-              <ArrowRight className="ml-1 h-4 w-4" />
-            </Link>
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-3">
-              {[1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-4 rounded-lg border p-4"
-                >
-                  <Skeleton className="h-10 w-10 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-48" />
-                    <Skeleton className="h-3 w-32" />
-                  </div>
-                  <Skeleton className="h-9 w-20" />
-                  <Skeleton className="h-9 w-20" />
-                </div>
-              ))}
-            </div>
-          ) : pendingRequests.length > 0 ? (
-            <div className="space-y-3">
-              {pendingRequests.slice(0, 5).map((req) => (
-                <div
-                  key={req.id}
-                  className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                    <User className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-0.5">
-                    <p className="text-sm font-medium truncate">
-                      {req.customer?.firstName} {req.customer?.lastName}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {req.service?.name || "Service"}{" "}
-                      <span className="text-muted-foreground/60">&middot;</span>{" "}
-                      {req.serviceType.replace("_", " ")}
-                    </p>
-                    {req.customerNotes && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
-                        <FileText className="h-3 w-3 shrink-0" />
-                        {req.customerNotes}
-                      </p>
-                    )}
-                    <p className="text-[11px] text-muted-foreground/70">
-                      {new Date(req.createdAt).toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <Button
-                      size="sm"
-                      onClick={() => handleAccept(req.id)}
-                      disabled={actionLoading === req.id}
-                    >
-                      {actionLoading === req.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Check className="h-4 w-4" />
-                      )}
-                      Accept
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => {
-                        setRejectingId(req.id);
-                        setRejectDialogOpen(true);
-                      }}
-                      disabled={actionLoading === req.id}
-                    >
-                      <X className="h-4 w-4" />
-                      Reject
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              {pendingRequests.length > 5 && (
-                <div className="pt-2 text-center">
-                  <Button variant="link" asChild>
-                    <Link href="/bookings">
-                      +{pendingRequests.length - 5} more requests
-                    </Link>
-                  </Button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="py-8 text-center text-muted-foreground">
-              <Inbox className="mx-auto h-10 w-10 text-muted-foreground/30 mb-2" />
-              <p className="text-sm font-medium">No pending requests</p>
-              <p className="text-xs">
-                New booking requests from customers will appear here.
-              </p>
-            </div>
-          )}
         </CardContent>
       </Card>
+    </Link>
+  );
+}
 
-      {/* Recent Transactions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Recent Transactions</CardTitle>
-          <CardDescription>
-            Your latest earnings and withdrawal activity.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <Skeleton className="h-10 w-10 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-40" />
-                    <Skeleton className="h-3 w-24" />
-                  </div>
-                  <Skeleton className="h-4 w-16" />
-                </div>
-              ))}
+function SummaryCard({ title, value, loading, icon, iconBg, href }: { title: string, value: string, loading: boolean, icon: React.ReactNode, iconBg: string, href: string }) {
+  return (
+    <Link href={href} className="block">
+      <Card className="border-none shadow-sm hover:shadow-md transition-shadow group">
+        <CardContent className="p-5 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className={cn("p-2.5 rounded-full", iconBg)}>
+              {icon}
             </div>
-          ) : transactions.length > 0 ? (
-            <div className="space-y-4">
-              {transactions.slice(0, 10).map((tx) => (
-                <div
-                  key={tx.id}
-                  className="flex items-center gap-4 rounded-lg border p-3"
-                >
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                      tx.type === "earning"
-                        ? "bg-green-50 text-green-600"
-                        : tx.type === "withdrawal"
-                          ? "bg-red-50 text-red-600"
-                          : "bg-blue-50 text-blue-600"
-                    }`}
-                  >
-                    {tx.type === "earning" ? (
-                      <ArrowDownRight className="h-5 w-5" />
-                    ) : (
-                      <ArrowUpRight className="h-5 w-5" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {tx.description}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(tx.createdAt).toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p
-                      className={`text-sm font-semibold ${
-                        tx.type === "earning"
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      {tx.type === "earning" ? "+" : "-"}₹
-                      {tx.amount.toLocaleString()}
-                    </p>
-                    <Badge
-                      variant={
-                        tx.status === "completed"
-                          ? "default"
-                          : tx.status === "pending"
-                            ? "secondary"
-                            : "outline"
-                      }
-                      className="text-[10px]"
-                    >
-                      {tx.status}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="py-8 text-center text-muted-foreground">
-              <IndianRupee className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
-              <p className="font-medium">No transactions yet</p>
-              <p className="text-sm">
-                Your earnings and withdrawals will appear here.
-              </p>
-            </div>
-          )}
+            <span className="font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+              {title}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xl font-bold">
+              {loading ? <Skeleton className="h-7 w-12" /> : value}
+            </span>
+            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+          </div>
         </CardContent>
       </Card>
-
-      {/* Reject Dialog */}
-      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Booking Request</DialogTitle>
-            <DialogDescription>
-              Optionally provide a reason for rejecting this request.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Input
-              placeholder="Reason for rejection (optional)"
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setRejectDialogOpen(false);
-                setRejectingId(null);
-                setRejectReason("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReject}
-              disabled={actionLoading === rejectingId}
-            >
-              {actionLoading === rejectingId && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Reject Request
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </Link>
   );
 }

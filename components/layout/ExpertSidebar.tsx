@@ -172,14 +172,14 @@ export function ExpertSidebar() {
                   {initials}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex flex-col text-left text-xs leading-tight min-w-0 group-data-[collapsible=icon]:opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
+              <span className="flex flex-col text-left text-xs leading-tight min-w-0 group-data-[collapsible=icon]:opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
                 <span className="font-medium truncate">
                   {user?.firstName} {user?.lastName}
                 </span>
                 <span className="text-sm text-muted-foreground truncate">
                   {user?.email || user?.mobile}
                 </span>
-              </div>
+              </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem className="px-0.5">

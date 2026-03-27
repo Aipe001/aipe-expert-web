@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "@/lib/store/store";
@@ -34,8 +34,13 @@ export default function LoginPage() {
   const [identifier, setIdentifier] = useState("");
   const [otp, setOtp] = useState("");
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace("/dashboard");
+    }
+  }, [isAuthenticated, router]);
+
   if (isAuthenticated) {
-    router.replace("/dashboard");
     return null;
   }
 

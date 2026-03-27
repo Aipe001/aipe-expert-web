@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { LogOut, User, Bell } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -30,7 +31,7 @@ const pageTitles: Record<string, string> = {
 export function Header() {
   const dispatch = useDispatch();
   const pathname = usePathname();
-  const { isMobile } = useSidebar();
+  const {  } = useSidebar();
   const { user } = useSelector((state: RootState) => state.auth);
 
   const initials =
@@ -102,9 +103,11 @@ export function Header() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer">
-              <User className="mr-2 h-4 w-4" />
-              Profile
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard" className="cursor-pointer flex items-center w-full">
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

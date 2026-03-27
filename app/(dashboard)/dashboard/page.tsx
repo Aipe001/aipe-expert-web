@@ -139,7 +139,7 @@ export default function DashboardPage() {
   const statCards = [
     {
       title: "Total Earnings",
-      value: stats ? `₹${stats.totalEarnings.toLocaleString()}` : "₹0",
+      value: stats?.totalEarnings !== undefined ? `₹${stats.totalEarnings.toLocaleString()}` : "₹0",
       description: "Lifetime earnings",
       icon: IndianRupee,
       color: "text-green-600",
@@ -147,7 +147,7 @@ export default function DashboardPage() {
     },
     {
       title: "This Month",
-      value: stats ? `₹${stats.monthlyEarnings.toLocaleString()}` : "₹0",
+      value: stats?.monthlyEarnings !== undefined ? `₹${stats.monthlyEarnings.toLocaleString()}` : "₹0",
       description: "Current month",
       icon: TrendingUp,
       color: "text-blue-600",
@@ -155,7 +155,7 @@ export default function DashboardPage() {
     },
     {
       title: "Pending Payout",
-      value: stats ? `₹${stats.pendingPayout.toLocaleString()}` : "₹0",
+      value: stats?.pendingPayout !== undefined ? `₹${stats.pendingPayout.toLocaleString()}` : "₹0",
       description: "Awaiting transfer",
       icon: Clock,
       color: "text-orange-600",

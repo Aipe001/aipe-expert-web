@@ -210,7 +210,7 @@ export default function WalletPage() {
                 ₹
                 {transactions
                   .filter((t) => t.type === "earning")
-                  .reduce((sum, t) => sum + t.amount, 0)
+                  .reduce((sum, t) => sum + (t.amount ?? 0), 0)
                   .toLocaleString()}
               </span>
             </div>
@@ -222,7 +222,7 @@ export default function WalletPage() {
                 ₹
                 {transactions
                   .filter((t) => t.type === "withdrawal")
-                  .reduce((sum, t) => sum + t.amount, 0)
+                  .reduce((sum, t) => sum + (t.amount ?? 0), 0)
                   .toLocaleString()}
               </span>
             </div>
@@ -236,7 +236,7 @@ export default function WalletPage() {
                   .filter(
                     (t) => t.type === "withdrawal" && t.status === "pending",
                   )
-                  .reduce((sum, t) => sum + t.amount, 0)
+                  .reduce((sum, t) => sum + (t.amount ?? 0), 0)
                   .toLocaleString()}
               </span>
             </div>
@@ -310,7 +310,7 @@ export default function WalletPage() {
                       }`}
                     >
                       {tx.type === "earning" ? "+" : "-"}₹
-                      {tx.amount.toLocaleString()}
+                      {tx.amount?.toLocaleString() ?? "0"}
                     </p>
                     <Badge
                       variant={

@@ -39,7 +39,7 @@ import Image from "next/image";
 const navItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Bookings", href: "/bookings", icon: CalendarCheck },
-  { title: "Wallet", href: "/wallet", icon: Wallet },
+  { title: "Earnings", href: "/earnings", icon: Wallet },
   { title: "KYC", href: "/kyc", icon: ShieldCheck },
 ];
 

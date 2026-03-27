@@ -170,7 +170,7 @@ export default function DashboardPage() {
             loading={loading}
             icon={<Video className="h-6 w-6 text-[#1C8AFF]" />} 
             iconBg="bg-blue-50"
-            href="/bookings"
+            href="/bookings?tab=active"
           />
           {/* Requested */}
           <BookingCard 
@@ -179,7 +179,7 @@ export default function DashboardPage() {
             loading={loading}
             icon={<FileText className="h-6 w-6 text-yellow-500" />} 
             iconBg="bg-yellow-50"
-            href="/bookings"
+            href="/bookings?tab=requested"
           />
           {/* Upcoming */}
           <BookingCard 
@@ -188,7 +188,7 @@ export default function DashboardPage() {
             loading={loading}
             icon={<Calendar className="h-6 w-6 text-purple-600" />} 
             iconBg="bg-purple-50"
-            href="/bookings"
+            href="/bookings?tab=upcoming"
           />
           {/* Completed */}
           <BookingCard 
@@ -197,7 +197,7 @@ export default function DashboardPage() {
             loading={loading}
             icon={<CheckCircle2 className="h-6 w-6 text-green-600" />} 
             iconBg="bg-green-50"
-            href="/bookings"
+            href="/bookings?tab=completed"
           />
         </div>
       </motion.div>
@@ -211,7 +211,7 @@ export default function DashboardPage() {
             loading={loading}
             icon={<Users className="h-5 w-5 text-purple-600" />} 
             iconBg="bg-purple-50"
-            href="/bookings"
+            href="/bookings?tab=completed"
           />
         </motion.div>
         <motion.div variants={itemVariants}>
@@ -221,7 +221,7 @@ export default function DashboardPage() {
             loading={loading}
             icon={<Wallet className="h-5 w-5 text-green-600" />} 
             iconBg="bg-green-50"
-            href="/wallet"
+            href="/earnings"
           />
         </motion.div>
       </div>

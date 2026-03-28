@@ -104,7 +104,7 @@ export default function DashboardPage() {
       {/* Top Row: Rating & Status */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <motion.div variants={itemVariants}>
-          <Link href="/dashboard" className="block h-full">
+          <Link href="/ratings" className="block h-full">
             <Card className="h-full border-none shadow-sm hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-5 flex items-center justify-between">
                 <div className="space-y-1">

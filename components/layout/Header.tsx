@@ -23,6 +23,8 @@ import Link from "next/link";
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/bookings": "Bookings",
+  "/earnings": "Earnings",
+  "/ratings": "My Ratings",
   "/wallet": "Wallet",
   "/kyc": "KYC Verification",
   "/kyc/pending": "KYC Status",
@@ -44,6 +46,11 @@ export function Header() {
     )?.[1] ||
     "Expert Portal";
 
+  // Hide header on individual chat pages
+  if (pathname.includes("/chat/") && pathname !== "/chat") {
+    return null;
+  }
+
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
       <div className="flex items-center gap-2">
@@ -55,7 +62,10 @@ export function Header() {
       </div>
 
       {/* Centered Logo and Text */}
-      <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0 pointer-events-none">
+      <Link 
+        href="/dashboard" 
+        className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0 hover:opacity-80 transition-opacity"
+      >
         <div className="relative h-16 w-16">
           <Image
             src="/aipe_logo3.png"
@@ -67,7 +77,7 @@ export function Header() {
         <span className="text-lg font-bold tracking-tight whitespace-nowrap">
           <span className="text-[#1C8AFF] italic">Expert Console</span>
         </span>
-      </div>
+      </Link>
 
       <div className="flex-1" />
 

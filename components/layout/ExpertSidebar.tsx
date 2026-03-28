@@ -8,8 +8,10 @@ import {
   Wallet,
   ShieldCheck,
   LogOut,
+  Star,
   ChevronsLeft,
   ChevronsRight,
+  MessageSquare,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "@/lib/store/store";
@@ -40,6 +42,8 @@ const navItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Bookings", href: "/bookings", icon: CalendarCheck },
   { title: "Earnings", href: "/earnings", icon: Wallet },
+  { title: "Ratings", href: "/ratings", icon: Star },
+  { title: "Chat", href: "/chat", icon: MessageSquare },
   { title: "KYC", href: "/kyc", icon: ShieldCheck },
 ];
 
@@ -83,7 +87,10 @@ export function ExpertSidebar() {
   return (
     <Sidebar collapsible="icon" variant="sidebar">
       <SidebarHeader className="border-b border-sidebar-border px-3 py-3 h-14 flex items-center justify-between overflow-hidden">
-        <div className="flex items-center gap-2 min-w-0 relative h-8 w-full">
+        <Link 
+          href="/dashboard" 
+          className="flex items-center gap-2 min-w-0 relative h-8 w-full hover:opacity-80 transition-opacity cursor-pointer z-10"
+        >
           <AnimatePresence mode="wait">
             {state === "expanded" || isMobile ? (
               <motion.div
@@ -124,7 +131,7 @@ export function ExpertSidebar() {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </Link>
 
         <div className="group-data-[collapsible=icon]:opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
           <CollapseToggle />

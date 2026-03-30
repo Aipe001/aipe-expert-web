@@ -114,7 +114,7 @@ export function Header() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href="/dashboard" className="cursor-pointer flex items-center w-full">
+              <Link href="/profile" className="cursor-pointer flex items-center w-full">
                 <User className="mr-2 h-4 w-4" />
                 Profile
               </Link>

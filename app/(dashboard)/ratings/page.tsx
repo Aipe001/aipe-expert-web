@@ -21,10 +21,19 @@ interface Review {
 
 export default function RatingsPage() {
   const router = useRouter();
-  const { isAuthenticated, onboardingStatus } = useSelector((state: RootState) => state.auth);
-  const expertId = onboardingStatus?.expert?.id;
+  // const { isAuthenticated, onboardingStatus } = useSelector((state: RootState) => state.auth);
+  // const expertId = onboardingStatus?.expert?.id;
+
+  const { isAuthenticated, user } = useSelector(
+    (state: RootState) => state.auth,
+  );
+  const expertId = user?.id;
 
   const [stats, setStats] = useState<EarningsStats | null>(null);
+  const [ratingData, setRatingData] = useState<{
+    average: number;
+    count: number;
+  }>({ average: 0, count: 0 });
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,19 +49,28 @@ export default function RatingsPage() {
         setStats(statsData);
 
         if (expertId) {
-          const reviewsData = await expertApi.getExpertReviews(expertId);
-          // Assuming reviewsData has fields like { id, rating, comment, createdAt, user: { firstName, lastName } }
-          const mappedReviews: Review[] = reviewsData.map((r: any) => ({
+          const [ratingRes, reviewsRes] = await Promise.all([
+            expertApi.getExpertRating(expertId),
+            expertApi.getExpertReviews(expertId),
+          ]);
+
+          setRatingData(ratingRes);
+
+          // Map raw reviews data to Review interface
+          const mappedReviews: Review[] = reviewsRes.map((r: any) => ({
             id: r.id,
             userName: `${r.user?.firstName || "Anonymous"} ${r.user?.lastName || ""}`,
             title: `Service Reference: ${r.bookingId?.substring(0, 8) || "N/A"}`,
             rating: r.rating,
             review: r.comment || "No comment provided.",
-            date: new Date(r.createdAt || Date.now()).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            }),
+            date: new Date(r.createdAt || Date.now()).toLocaleDateString(
+              "en-IN",
+              {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              },
+            ),
           }));
           setReviews(mappedReviews);
         }
@@ -66,9 +84,12 @@ export default function RatingsPage() {
     fetchData();
   }, [isAuthenticated, router, expertId]);
 
-  const averageRating = stats?.rating || 0;
+  // const averageRating = stats?.rating || 0;
+  // const totalReviews = stats?.totalReviews || 0;
   const totalServices = stats?.completedConsultations || 0;
-  const totalReviews = stats?.totalReviews || 0;
+
+  const averageRating = ratingData.average || 0;
+  const totalReviews = ratingData.count || 0;
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -117,16 +138,30 @@ export default function RatingsPage() {
             <CardContent className="p-8 flex flex-col items-center text-center space-y-2">
               <div className="flex items-center gap-2 mb-2">
                 <Star className="h-6 w-6 fill-yellow-400 text-yellow-400" />
-                <span className="text-sm font-semibold uppercase tracking-widest opacity-80">Average Rating</span>
+                <span className="text-sm font-semibold uppercase tracking-widest opacity-80">
+                  Average Rating
+                </span>
               </div>
-              <span className="text-6xl font-black">{averageRating.toFixed(1)}</span>
+              <span className="text-6xl font-black">
+                {averageRating.toFixed(1)}
+              </span>
               <div className="flex gap-1 mt-2">
                 {[...Array(5)].map((_, i) => {
                   const value = i + 1;
                   if (value <= Math.floor(averageRating)) {
-                    return <Star key={i} className="h-5 w-5 fill-yellow-400 text-yellow-400" />;
+                    return (
+                      <Star
+                        key={i}
+                        className="h-5 w-5 fill-yellow-400 text-yellow-400"
+                      />
+                    );
                   } else if (value - 0.5 <= averageRating) {
-                    return <StarHalf key={i} className="h-5 w-5 fill-yellow-400 text-yellow-400" />;
+                    return (
+                      <StarHalf
+                        key={i}
+                        className="h-5 w-5 fill-yellow-400 text-yellow-400"
+                      />
+                    );
                   } else {
                     return <Star key={i} className="h-5 w-5 text-white/30" />;
                   }
@@ -143,8 +178,12 @@ export default function RatingsPage() {
               <div className="bg-green-50 p-3 rounded-full mb-3">
                 <CheckCircle2 className="h-8 w-8 text-green-600" />
               </div>
-              <span className="text-4xl font-bold text-slate-800">{totalServices}</span>
-              <p className="text-slate-500 font-medium lowercase">Total Services Completed</p>
+              <span className="text-4xl font-bold text-slate-800">
+                {totalServices}
+              </span>
+              <p className="text-slate-500 font-medium lowercase">
+                Total Services Completed
+              </p>
             </CardContent>
           </Card>
         </motion.div>
@@ -153,9 +192,13 @@ export default function RatingsPage() {
       {/* Reviews Section */}
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-slate-800">Customer Reviews</h2>
+          <h2 className="text-2xl font-bold text-slate-800">
+            Customer Reviews
+          </h2>
           {totalReviews > 0 && (
-            <span className="text-sm text-slate-500 font-medium">{totalReviews} total reviews</span>
+            <span className="text-sm text-slate-500 font-medium">
+              {totalReviews} total reviews
+            </span>
           )}
         </div>
 
@@ -165,9 +208,12 @@ export default function RatingsPage() {
               <div className="bg-slate-100 p-4 rounded-full mb-4">
                 <Star className="h-8 w-8 text-slate-400" />
               </div>
-              <h3 className="font-bold text-lg text-slate-700">No Reviews Yet</h3>
+              <h3 className="font-bold text-lg text-slate-700">
+                No Reviews Yet
+              </h3>
               <p className="text-slate-500 mt-1 max-w-sm">
-                Your customer reviews will appear here once they start rating your services.
+                Your customer reviews will appear here once they start rating
+                your services.
               </p>
             </CardContent>
           </Card>
@@ -183,7 +229,9 @@ export default function RatingsPage() {
                           <span className="text-xs font-bold text-[#1C8AFF] uppercase tracking-wider">
                             Ticket #{review.id}
                           </span>
-                          <h3 className="text-lg font-bold text-slate-900">{review.userName}</h3>
+                          <h3 className="text-lg font-bold text-slate-900">
+                            {review.userName}
+                          </h3>
                           <p className="text-sm font-semibold text-slate-600 flex items-center gap-2">
                             <Award className="h-4 w-4 text-slate-400" />
                             {review.title}
@@ -192,12 +240,16 @@ export default function RatingsPage() {
                         <p className="text-slate-600 leading-relaxed italic text-sm">
                           &quot;{review.review}&quot;
                         </p>
-                        <span className="text-xs text-slate-400 block font-medium">{review.date}</span>
+                        <span className="text-xs text-slate-400 block font-medium">
+                          {review.date}
+                        </span>
                       </div>
 
                       <div className="flex flex-row md:flex-col items-center md:justify-center gap-4 md:border-l md:border-slate-100 md:pl-8 md:min-w-35">
                         <div className="text-center">
-                          <span className="text-4xl font-black text-slate-800">{review.rating.toFixed(1)}</span>
+                          <span className="text-4xl font-black text-slate-800">
+                            {review.rating.toFixed(1)}
+                          </span>
                         </div>
                         <StarRating rating={review.rating} />
                       </div>
@@ -219,9 +271,16 @@ function StarRating({ rating }: { rating: number }) {
       {[...Array(5)].map((_, i) => {
         const value = i + 1;
         if (value <= rating) {
-          return <Star key={i} className="h-5 w-5 fill-yellow-400 text-yellow-400" />;
+          return (
+            <Star key={i} className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+          );
         } else if (value - 0.5 === rating) {
-          return <StarHalf key={i} className="h-5 w-5 fill-yellow-400 text-yellow-400" />;
+          return (
+            <StarHalf
+              key={i}
+              className="h-5 w-5 fill-yellow-400 text-yellow-400"
+            />
+          );
         } else {
           return <Star key={i} className="h-5 w-5 text-slate-200" />;
         }

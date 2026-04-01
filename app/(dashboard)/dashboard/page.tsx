@@ -69,6 +69,7 @@ export default function DashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
+  const [isToggleLoading, setIsToggleLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -122,6 +123,19 @@ export default function DashboardPage() {
       );
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleToggleAvailability = async () => {
+    setIsToggleLoading(true);
+    try {
+      const res = await expertApi.toggleAvailability();
+      setIsOnline(res.isAvailable);
+    } catch (err: unknown) {
+      // Keep error console for debugging, but remove user toast as requested
+      console.error("Toggle availability failed", err);
+    } finally {
+      setIsToggleLoading(false);
     }
   };
 
@@ -202,12 +216,44 @@ export default function DashboardPage() {
         <motion.div variants={itemVariants}>
           <Card
             className={cn(
-              "h-full border-none shadow-sm transition-all cursor-pointer overflow-hidden",
-              isOnline ? "bg-[#1C8AFF]/5 ring-1 ring-[#1C8AFF]/20" : "bg-background"
+              "h-full border-none shadow-sm transition-all cursor-pointer overflow-hidden relative",
+              isOnline ? "bg-[#1C8AFF]/5 ring-1 ring-[#1C8AFF]/20" : "bg-background",
+              isToggleLoading && "opacity-80 pointer-events-none"
             )}
-            onClick={() => setIsOnline(!isOnline)}
+            onClick={handleToggleAvailability}
           >
-            <CardContent className="p-5 flex items-center justify-between">
+            {/* Pulsing Backdrop Glow */}
+            {isOnline && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{
+                    opacity: [0.4, 0.7, 0.4],
+                    scale: [1, 1.1, 1],
+                  }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                  className="absolute inset-0 bg-linear-to-br from-[#1C8AFF]/30 via-[#1C8AFF]/5 to-transparent pointer-events-none blur-xl"
+                />
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{
+                    opacity: [0.3, 0.6, 0.3],
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                  className="absolute inset-0 bg-[#1C8AFF]/10 pointer-events-none"
+                />
+              </>
+            )}
+
+            <CardContent className="p-5 flex items-center justify-between relative z-10">
               <div className="space-y-1">
                 <div className="flex items-center gap-3">
                   <motion.div
@@ -221,7 +267,11 @@ export default function DashboardPage() {
                       isOnline ? "text-[#1C8AFF] drop-shadow-[0_0_12px_rgba(28,138,255,0.7)]" : "text-muted-foreground"
                     )}
                   >
-                    <Power className="h-6 w-6" />
+                    {isToggleLoading ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-[#1C8AFF]" />
+                    ) : (
+                      <Power className="h-6 w-6" />
+                    )}
                   </motion.div>
                   <span className="text-lg font-bold tracking-tight uppercase">
                     {isOnline ? "ONLINE" : "OFFLINE"}

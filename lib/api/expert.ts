@@ -145,5 +145,15 @@ export const expertApi = {
       body: JSON.stringify(data),
     });
   },
+
+  toggleAvailability: async (): Promise<{ isAvailable: boolean }> => {
+    return apiClient<{ isAvailable: boolean }>("/experts/toggle-availability", {
+      method: "PATCH",
+    });
+  },
+
+  getExpertRating: async (expertId: string): Promise<{ average: number; count: number }> => {
+    return apiClient<{ average: number; count: number }>(`/reviews/expert/${expertId}/rating`);
+  },
 };
 

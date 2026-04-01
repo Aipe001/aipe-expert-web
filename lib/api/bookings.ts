@@ -76,3 +76,18 @@ export const rejectBookingRequest = async (
     body: JSON.stringify({ reason }),
   });
 };
+
+export const updateBookingStatus = async (
+  id: string,
+  status: string,
+): Promise<Booking> => {
+  return apiClient<Booking>(`/bookings/${id}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+};
+
+export const getBookingById = async (id: string): Promise<Booking> => {
+  return apiClient<Booking>(`/bookings/${id}`);
+};
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+  import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "@/lib/store/store";
@@ -46,6 +46,13 @@ export default function LoginPage() {
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Client-side validation: must be exactly 10 digits
+    if (!/^\d{10}$/.test(identifier)) {
+      dispatch(loginFailure("Invalid phone number. Must be exactly 10 digits."));
+      return;
+    }
+
     dispatch(loginStart());
     try {
       await authApi.sendOtp(identifier);
@@ -126,7 +133,8 @@ export default function LoginPage() {
                     type="tel"
                     placeholder="Enter your mobile number"
                     value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
+                    onChange={(e) => setIdentifier(e.target.value.replace(/\D/g, ''))}
+                    maxLength={10}
                     required
                   />
                 </div>

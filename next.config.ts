@@ -1,10 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* Static export for Netlify */
-  output: 'export',
   images: { unoptimized: true },
-  trailingSlash: true,
 
   webpack(config) {
     config.module.rules.push({

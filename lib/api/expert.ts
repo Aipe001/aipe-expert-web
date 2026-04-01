@@ -104,16 +104,20 @@ export const expertApi = {
   },
 
   getWallet: async (): Promise<WalletInfo> => {
-    return apiClient<WalletInfo>("/experts/wallet");
+    return apiClient<WalletInfo>("/wallet");
   },
 
   requestWithdrawal: async (
     data: WithdrawalRequest,
   ): Promise<{ message: string }> => {
-    return apiClient<{ message: string }>("/experts/withdraw", {
+    return apiClient<{ message: string }>("/wallet/withdraw", {
       method: "POST",
       body: JSON.stringify(data),
     });
+  },
+
+  getExpertReviews: async (expertId: string): Promise<any[]> => {
+    return apiClient<any[]>(`/reviews/expert/${expertId}`);
   },
 
   // ── KYC Templates & Submissions (new system) ────────────────

@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Provider } from "react-redux";
 import { store } from "@/lib/store/store";
 import { AuthInitializer } from "@/components/auth/AuthInitializer";
+import { NotificationManager } from "@/components/NotificationManager";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
@@ -17,9 +18,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <Provider store={store}>
         <AuthInitializer />
         <TooltipProvider>
+          <NotificationManager />
           {children}
           <Toaster />
-          <Sonner />
+          <Sonner position="top-center" expand={true} richColors />
         </TooltipProvider>
       </Provider>
     </QueryClientProvider>

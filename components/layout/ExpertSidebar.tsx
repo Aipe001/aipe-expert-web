@@ -78,8 +78,19 @@ function CollapseToggle() {
 export function ExpertSidebar() {
   const pathname = usePathname();
   const dispatch = useDispatch();
-  const { user } = useSelector((state: RootState) => state.auth);
+  const { user, onboardingStatus } = useSelector((state: RootState) => state.auth);
   const { state, isMobile } = useSidebar();
+
+  type UserType = typeof user & { role?: { name?: string }, roleName?: string };
+  const typedUser = user as UserType;
+
+  const isAuthorized =
+    user?.isExpert ||
+    typedUser?.role?.name === "admin" ||
+    typedUser?.role?.name === "super_admin" ||
+    typedUser?.roleName === "admin" ||
+    typedUser?.roleName === "super_admin" ||
+    onboardingStatus?.kyc?.status === "VERIFIED";
 
   const initials =
     (user?.firstName?.[0] || "") + (user?.lastName?.[0] || "") || "EX";
@@ -146,22 +157,39 @@ export function ExpertSidebar() {
                 const isActive =
                   pathname === item.href ||
                   pathname.startsWith(item.href + "/");
+                
+                const isDisabled = item.href !== "/kyc" && !isAuthorized;
+
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive}
-                      tooltip={item.title}
-                    >
-                      <Link href={item.href}>
-                        <item.icon
-                          className={isActive ? "text-primary " : ""}
-                        />
+                    {isDisabled ? (
+                      <SidebarMenuButton
+                        isActive={isActive}
+                        tooltip={item.title}
+                        disabled={true}
+                        className="opacity-50 cursor-not-allowed"
+                      >
+                        <item.icon className="text-muted-foreground mr-1" />
                         <span className="group-data-[collapsible=icon]:opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
                           {item.title}
                         </span>
-                      </Link>
-                    </SidebarMenuButton>
+                      </SidebarMenuButton>
+                    ) : (
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        tooltip={item.title}
+                      >
+                        <Link href={item.href}>
+                          <item.icon
+                            className={isActive ? "text-primary" : ""}
+                          />
+                          <span className="group-data-[collapsible=icon]:opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300">
+                            {item.title}
+                          </span>
+                        </Link>
+                      </SidebarMenuButton>
+                    )}
                   </SidebarMenuItem>
                 );
               })}

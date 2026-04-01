@@ -1,7 +1,18 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useSelector } from "react-redux";
+import { RootState } from "@/lib/store/store";
+import {
+  getExpertBookingRequests,
+  getExpertBookings,
+  acceptBookingRequest,
+  rejectBookingRequest,
+  updateBookingStatus,
+  BookingRequest,
+  Booking,
+} from "@/lib/api/bookings";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ChevronRight,
   MessageCircle,
@@ -17,90 +29,13 @@ import {
   Clock,
   CheckCircle2,
   ChevronLeft,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-
-interface Booking {
-  id: string;
-  service: string;
-  orderId: string;
-  amount: number;
-  customer: string;
-  bookedOn: string;
-  status: string;
-  steps?: string[];
-  currentStep?: number;
-  serviceTime?: string;
-  serviceDate?: string;
-  duration?: string;
-  completedOn?: string;
-}
-
-// Dummy Data
-const DUMMY_BOOKINGS: Record<string, Booking[]> = {
-  active: [
-    {
-      id: "a1",
-      service: "Company Registration",
-      orderId: "123456789",
-      amount: 1500,
-      customer: "Vikash Chauhan",
-      bookedOn: "3/14/2026",
-      status: "Document Received",
-      steps: ["Document Requested", "Document Received", "Under Review", "Completed"],
-      currentStep: 1,
-    },
-    {
-      id: "a2",
-      service: "GST Filing",
-      orderId: "987654321",
-      amount: 800,
-      customer: "Rahul Sharma",
-      bookedOn: "3/15/2026",
-      status: "Document Requested",
-      steps: ["Document Requested", "Document Received", "Under Review", "Completed"],
-      currentStep: 0,
-    }
-  ],
-  upcoming: [
-    {
-      id: "u1",
-      service: "GST Expert Booking",
-      orderId: "123456789",
-      amount: 500,
-      customer: "Vikash Chauhan",
-      bookedOn: "3/14/2026",
-      serviceTime: "4:30 PM",
-      serviceDate: "3/20/2026",
-      duration: "60 Min",
-      status: "Upcoming"
-    }
-  ],
-  completed: [
-    {
-      id: "c1",
-      service: "Trademark Registration",
-      orderId: "556677889",
-      amount: 2500,
-      customer: "Amit Patel",
-      bookedOn: "3/10/2026",
-      completedOn: "3/18/2026",
-      status: "Completed"
-    }
-  ],
-  requested: [
-    {
-      id: "r1",
-      service: "Legal Consultation",
-      orderId: "112233445",
-      amount: 1000,
-      customer: "Sanjay Gupta",
-      bookedOn: "3/26/2026",
-      status: "Requested"
-    }
-  ]
-};
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+import Link from "next/link";
 
 const STATUS_OPTIONS = [
   "Document Requested",
@@ -112,14 +47,47 @@ const STATUS_OPTIONS = [
   "Approved",
   "Accepted",
   "Rejected",
-  "Service Completed"
+  "Service Completed",
 ];
 
 function BookingsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const activeTab = searchParams.get("tab") || "active";
+
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [requests, setRequests] = useState<BookingRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
+  const [statusBookingId, setStatusBookingId] = useState<string | null>(null);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [bookRes, reqRes] = await Promise.allSettled([
+        getExpertBookings(),
+        getExpertBookingRequests(),
+      ]);
+      if (bookRes.status === "fulfilled") setBookings(bookRes.value);
+      if (reqRes.status === "fulfilled") setRequests(reqRes.value);
+    } catch (err) {
+      console.error("Failed to fetch bookings", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.replace("/");
+      return;
+    }
+    fetchData();
+  }, [isAuthenticated, router, fetchData]);
 
   const setTab = (tab: string) => {
     const params = new URLSearchParams(searchParams);
@@ -127,12 +95,82 @@ function BookingsContent() {
     router.push(`/bookings?${params.toString()}`);
   };
 
+  // Categorize bookings
+  const activeBookings = bookings.filter((b) => b.status === "active");
+  const upcomingBookings = bookings.filter((b) => b.status === "confirmed" || b.status === "upcoming");
+  const completedBookings = bookings.filter((b) => b.status === "completed");
+  const pendingRequests = requests.filter((r) => r.status.toLowerCase() === "pending");
+
+  const getFilteredData = (): (Booking | BookingRequest)[] => {
+    switch (activeTab) {
+      case "active": return activeBookings;
+      case "upcoming": return upcomingBookings;
+      case "completed": return completedBookings;
+      case "requested": return pendingRequests;
+      default: return activeBookings;
+    }
+  };
+
+  const handleAccept = async (id: string) => {
+    setActionLoading(id);
+    try {
+      await acceptBookingRequest(id);
+      toast.success("Booking request accepted!");
+      await fetchData();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to accept");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectingId) return;
+    setActionLoading(rejectingId);
+    try {
+      await rejectBookingRequest(rejectingId, rejectReason || undefined);
+      toast.success("Booking request rejected");
+      setRejectDialogOpen(false);
+      setRejectingId(null);
+      setRejectReason("");
+      await fetchData();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to reject");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleStatusUpdate = async (status: string) => {
+    if (!statusBookingId) return;
+    try {
+      await updateBookingStatus(statusBookingId, status);
+      toast.success(`Status updated to "${status}"`);
+      setIsStatusOpen(false);
+      setStatusBookingId(null);
+      await fetchData();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update status");
+    }
+  };
+
+  const getStatusSteps = (status: string) => {
+    return [
+      { label: "Document Requested", completed: true },
+      { label: "Document Received", completed: status !== "pending_payment" },
+      { label: "Under Review", completed: status === "completed" || status === "active" },
+      { label: "Completed", completed: status === "completed" },
+    ];
+  };
+
   const tabs = [
-    { id: "active", label: "Active" },
-    { id: "upcoming", label: "Upcoming" },
-    { id: "completed", label: "Completed" },
-    { id: "requested", label: "Requested" },
+    { id: "active", label: "Active", count: activeBookings.length },
+    { id: "upcoming", label: "Upcoming", count: upcomingBookings.length },
+    { id: "completed", label: "Completed", count: completedBookings.length },
+    { id: "requested", label: "Requested", count: pendingRequests.length },
   ];
+
+  const filteredData = getFilteredData();
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-10">
@@ -156,6 +194,14 @@ function BookingsContent() {
             )}
           >
             {tab.label}
+            {tab.count > 0 && (
+              <span className={cn(
+                "ml-1.5 text-xs rounded-full px-1.5 py-0.5",
+                activeTab === tab.id ? "bg-[#1C8AFF]/10 text-[#1C8AFF]" : "bg-muted text-muted-foreground"
+              )}>
+                {tab.count}
+              </span>
+            )}
             {activeTab === tab.id && (
               <motion.div
                 layoutId="activeTab"
@@ -168,32 +214,66 @@ function BookingsContent() {
 
       {/* Content */}
       <div className="space-y-4">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-4"
-          >
-            {DUMMY_BOOKINGS[activeTab]?.map((booking: Booking) => (
-              <TicketCard 
-                key={booking.id} 
-                booking={booking} 
-                type={activeTab} 
-                onUpdateStatus={() => {
-                  setIsStatusOpen(true);
-                }}
-              />
+        {loading ? (
+          <div className="space-y-4">
+            {[1, 2].map((i) => (
+              <Card key={i} className="border-none shadow-md">
+                <CardContent className="p-5 space-y-4">
+                  <Skeleton className="h-6 w-48" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-8 w-24" />
+                  <Skeleton className="h-16 w-full" />
+                </CardContent>
+              </Card>
             ))}
-            {!DUMMY_BOOKINGS[activeTab]?.length && (
-              <div className="py-20 text-center text-muted-foreground">
-                No bookings in this category.
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
+          </div>
+        ) : (
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-4"
+            >
+              {filteredData.map((item) => {
+                if (activeTab === "requested") {
+                  const req = item as BookingRequest;
+                  return (
+                    <RequestCard
+                      key={req.id}
+                      request={req}
+                      actionLoading={actionLoading}
+                      onAccept={handleAccept}
+                      onReject={(id) => {
+                        setRejectingId(id);
+                        setRejectDialogOpen(true);
+                      }}
+                    />
+                  );
+                }
+                return (
+                  <TicketCard
+                    key={item.id}
+                    booking={item as Booking}
+                    type={activeTab}
+                    statusSteps={getStatusSteps((item as Booking).status)}
+                    onUpdateStatus={() => {
+                      setStatusBookingId(item.id);
+                      setIsStatusOpen(true);
+                    }}
+                  />
+                );
+              })}
+              {filteredData.length === 0 && (
+                <div className="py-20 text-center text-muted-foreground">
+                  No bookings in this category.
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        )}
       </div>
 
       {/* Select Status Dialog */}
@@ -206,7 +286,7 @@ function BookingsContent() {
             {STATUS_OPTIONS.map((status) => (
               <button
                 key={status}
-                onClick={() => setIsStatusOpen(false)}
+                onClick={() => handleStatusUpdate(status)}
                 className="w-full flex items-center justify-between px-6 py-4 hover:bg-muted/50 transition-colors border-b last:border-0"
               >
                 <span className="text-sm font-medium">{status}</span>
@@ -216,11 +296,92 @@ function BookingsContent() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject Booking Request</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <Textarea
+              placeholder="Reason for rejection (optional)"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+            />
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
+              <Button variant="destructive" onClick={handleReject} disabled={actionLoading === rejectingId}>
+                {actionLoading === rejectingId && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                Reject
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function TicketCard({ booking, type, onUpdateStatus }: { booking: Booking, type: string, onUpdateStatus: () => void }) {
+function RequestCard({ request, actionLoading, onAccept, onReject }: {
+  request: BookingRequest;
+  actionLoading: string | null;
+  onAccept: (id: string) => void;
+  onReject: (id: string) => void;
+}) {
+  return (
+    <Card className="border-none shadow-md overflow-hidden bg-white">
+      <CardContent className="p-5 space-y-4">
+        <div className="flex justify-between items-start">
+          <div className="space-y-1">
+            <h3 className="font-bold text-lg">Service: {request.service?.name || "Service Request"}</h3>
+            <p className="text-sm text-muted-foreground font-medium">Req ID: {request.id.substring(0, 8).toUpperCase()}</p>
+          </div>
+          <p className="text-xs text-muted-foreground">{new Date(request.createdAt).toLocaleDateString()}</p>
+        </div>
+        {request.customerNotes && (
+          <p className="text-sm text-muted-foreground italic">&quot;{request.customerNotes}&quot;</p>
+        )}
+        <div className="border-t pt-4 flex justify-between items-center">
+          <p className="text-sm font-semibold">
+            Customer: <span className="font-normal">
+              {request.customer ? `${request.customer.firstName} ${request.customer.lastName}` : "Anonymous"}
+            </span>
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="border-destructive text-destructive hover:bg-destructive/10 rounded-xl"
+              disabled={actionLoading === request.id}
+              onClick={() => onReject(request.id)}
+            >
+              Reject
+            </Button>
+            <Button
+              className="bg-[#1C8AFF] hover:bg-[#1C8AFF]/90 rounded-xl"
+              disabled={actionLoading === request.id}
+              onClick={() => onAccept(request.id)}
+            >
+              {actionLoading === request.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept"}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TicketCard({ booking, type, statusSteps, onUpdateStatus }: {
+  booking: Booking;
+  type: string;
+  statusSteps: { label: string; completed: boolean }[];
+  onUpdateStatus: () => void;
+}) {
+  const customerName = booking.user
+    ? `${booking.user.firstName} ${booking.user.lastName}`
+    : "Customer";
+
   return (
     <Card className="border-none shadow-md overflow-hidden bg-white">
       <CardContent className="p-0">
@@ -228,48 +389,40 @@ function TicketCard({ booking, type, onUpdateStatus }: { booking: Booking, type:
           {/* Top Line */}
           <div className="flex justify-between items-start">
             <div className="space-y-1">
-              <h3 className="font-bold text-lg">Service: {booking.service}</h3>
-              <p className="text-sm text-muted-foreground font-medium">Order ID: {booking.orderId}</p>
+              <h3 className="font-bold text-lg">Service: {booking.service?.name || "Service"}</h3>
+              <p className="text-sm text-muted-foreground font-medium">Order ID: {booking.bookingNumber}</p>
             </div>
-            <p className="text-xs text-muted-foreground">Booked on: {booking.bookedOn}</p>
+            <p className="text-xs text-muted-foreground">
+              Booked on: {new Date(booking.createdAt).toLocaleDateString()}
+            </p>
           </div>
 
           {/* Amount */}
-          <div className="text-xl font-bold text-[#1C8AFF]">₹ {booking.amount} /-</div>
+          <div className="text-xl font-bold text-[#1C8AFF]">₹ {booking.totalAmount} /-</div>
 
-          {/* Mode Specific Content */}
-          {type === "active" && booking.steps && (
+          {/* Active: Status Timeline */}
+          {type === "active" && (
             <div className="bg-[#1C8AFF]/5 rounded-xl p-4 space-y-4">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Status</p>
-              
-              {/* Stepper */}
               <div className="relative flex justify-between items-center px-2">
-                {/* Connector Line */}
                 <div className="absolute top-1.5 left-0 right-0 h-0.5 bg-muted-foreground/20 z-0" />
-                <div 
-                  className="absolute top-1.5 left-0 h-0.5 bg-[#1C8AFF] transition-all duration-500 z-0" 
-                  style={{ width: `${((booking.currentStep || 0) / (booking.steps.length - 1)) * 100}%` }}
-                />
-                
-                {booking.steps.map((step: string, idx: number) => (
-                  <div key={step} className="relative z-10 flex flex-col items-center gap-2">
+                {statusSteps.map((step, idx) => (
+                  <div key={step.label} className="relative z-10 flex flex-col items-center gap-2">
                     <div className={cn(
                       "w-3.5 h-3.5 rounded-full border-2 transition-colors duration-500",
-                      idx <= (booking.currentStep || 0) ? "bg-[#1C8AFF] border-[#1C8AFF]" : "bg-white border-muted-foreground/30"
+                      step.completed ? "bg-[#1C8AFF] border-[#1C8AFF]" : "bg-white border-muted-foreground/30"
                     )} />
                     <span className={cn(
                       "text-[10px] whitespace-nowrap hidden sm:block",
-                      idx <= (booking.currentStep || 0) ? "text-foreground font-medium" : "text-muted-foreground"
+                      step.completed ? "text-foreground font-medium" : "text-muted-foreground"
                     )}>
-                      {step}
+                      {step.label}
                     </span>
                   </div>
                 ))}
               </div>
-
-              {/* Status Update Link */}
               <div className="flex justify-end pt-2">
-                <button 
+                <button
                   onClick={onUpdateStatus}
                   className="text-sm font-bold text-[#1C8AFF] flex items-center gap-1 hover:underline"
                 >
@@ -279,48 +432,54 @@ function TicketCard({ booking, type, onUpdateStatus }: { booking: Booking, type:
             </div>
           )}
 
+          {/* Upcoming */}
           {type === "upcoming" && (
             <div className="flex items-center justify-between pt-2">
               <div className="flex items-start gap-4">
                 <div className="text-center p-2 bg-muted/30 rounded-lg min-w-20">
-                  <p className="text-[10px] text-muted-foreground uppercase font-bold flex items-center justify-center gap-1"><Clock className="h-3 w-3" /> {booking.duration}</p>
-                  <p className="text-xs font-bold">{booking.serviceDate}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase font-bold flex items-center justify-center gap-1">
+                    <Clock className="h-3 w-3" /> {booking.durationMinutes} Min
+                  </p>
+                  <p className="text-xs font-bold">
+                    {new Date(booking.scheduledAt).toLocaleDateString()}
+                  </p>
                 </div>
-                <div className="h-10 w-px bg-muted" />
               </div>
-              <Button className="bg-[#1C8AFF] hover:bg-[#1C8AFF]/90 rounded-xl px-6 py-6 text-base font-bold flex gap-2">
-                Service time {booking.serviceTime} | Join call <ChevronRight className="h-4 w-4" />
-              </Button>
+              <Link href={`/chat/${booking.id}`}>
+                <Button className="bg-[#1C8AFF] hover:bg-[#1C8AFF]/90 rounded-xl px-6 py-6 text-base font-bold flex gap-2">
+                  Service time {new Date(booking.scheduledAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} | Join call <ChevronRight className="h-4 w-4" />
+                </Button>
+              </Link>
             </div>
           )}
 
+          {/* Completed */}
           {type === "completed" && (
             <div className="bg-green-50 rounded-xl p-4 flex items-center justify-between">
               <div className="flex items-center gap-2 text-green-700 font-bold">
                 <CheckCircle2 className="h-5 w-5" />
                 Request Completed
               </div>
-              <div className="text-sm text-green-700 font-medium">On {booking.completedOn}</div>
-            </div>
-          )}
-
-          {type === "requested" && (
-            <div className="flex gap-2 pt-2">
-              <Button className="flex-1 bg-[#1C8AFF] hover:bg-[#1C8AFF]/90 rounded-xl">Accept</Button>
-              <Button variant="outline" className="flex-1 rounded-xl border-destructive text-destructive hover:bg-destructive/10">Reject</Button>
+              <div className="text-sm text-green-700 font-medium">
+                {booking.completedAt ? `On ${new Date(booking.completedAt).toLocaleDateString()}` : ""}
+              </div>
             </div>
           )}
 
           {/* Footer */}
           <div className="border-t pt-4 flex justify-between items-center mt-4">
-            <p className="text-sm font-semibold">Customer: <span className="font-normal">{booking.customer}</span></p>
+            <p className="text-sm font-semibold">Customer: <span className="font-normal">{customerName}</span></p>
             <div className="flex gap-3">
-              <button className="p-2 rounded-full bg-green-50 text-green-600 hover:bg-green-100 transition-colors">
-                <MessageCircle className="h-5 w-5" />
-              </button>
-              <button className="p-2 rounded-full bg-blue-50 text-[#1C8AFF] hover:bg-blue-50 transition-colors">
-                <Phone className="h-5 w-5" />
-              </button>
+              <Link href={`/chat/${booking.id}`}>
+                <button className="p-2 rounded-full bg-green-50 text-green-600 hover:bg-green-100 transition-colors">
+                  <MessageCircle className="h-5 w-5" />
+                </button>
+              </Link>
+              <Link href={`/chat/${booking.id}`}>
+                <button className="p-2 rounded-full bg-blue-50 text-[#1C8AFF] hover:bg-blue-100 transition-colors">
+                  <Phone className="h-5 w-5" />
+                </button>
+              </Link>
             </div>
           </div>
         </div>
@@ -331,13 +490,12 @@ function TicketCard({ booking, type, onUpdateStatus }: { booking: Booking, type:
 
 export default function BookingsPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
       <BookingsContent />
     </Suspense>
   );
 }
-
-function Loader2({ className }: { className: string }) {
-  return <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className={className} />;
-}
-

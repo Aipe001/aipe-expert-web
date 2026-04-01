@@ -7,6 +7,7 @@ import { addNotification, setConnected, fetchUnreadCount } from "@/lib/store/sli
 import { toast } from "sonner";
 import { Bell } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { API_BASE_URL } from "@/lib/api/client";
 
 export function NotificationManager() {
   const dispatch = useDispatch<AppDispatch>();
@@ -27,68 +28,105 @@ export function NotificationManager() {
     const connectSSE = () => {
       // Basic SSE implementation. If the backend needs custom headers, we might need a fetch-based reader fallback.
       // But standard EventSource works with query params for auth sometimes, or standard cookies.
-      // Since mobile app uses fetch based SSE, web might need standard EventSource.
+      const sseUrl = `${API_BASE_URL}/notifications/sse`;
+      const abortController = new AbortController();
+
+      console.log(`[SSE] Connecting to: ${sseUrl}...`);
       
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const sseUrl = `${baseUrl}/notifications/sse?token=${token}`;
-
-      const es = new EventSource(sseUrl);
-      eventSourceRef.current = es;
-
-      es.onopen = () => {
-        console.log("[SSE] Connected");
-        dispatch(setConnected(true));
-        reconnectAttemptRef.current = 0;
-        dispatch(fetchUnreadCount());
-      };
-
-      es.onmessage = (event) => {
+      const connect = async () => {
         try {
-          const data = JSON.parse(event.data);
-          if (data.type === "heartbeat" || data.type === "connected") return;
-
-          dispatch(addNotification(data));
-          
-          // Show toast
-          toast(data.title || "New Notification", {
-            description: data.message,
-            icon: <Bell className="h-4 w-4 text-[#1C8AFF]" />,
-            action: {
-              label: "View",
-              onClick: () => {
-                if (data.type === "booking_request") {
-                  router.push("/bookings?tab=requested");
-                } else if (data.type === "new_message") {
-                  const bookingId = data.metadata?.bookingId || data.bookingId;
-                  if (bookingId) router.push(`/chat/${bookingId}`);
-                }
-              },
+          const response = await fetch(sseUrl, {
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Accept": "text/event-stream",
             },
+            signal: abortController.signal,
           });
-        } catch (err) {
-          console.warn("[SSE] Parse error:", err);
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          if (!response.body) {
+            throw new Error("No response body");
+          }
+
+          console.log("[SSE] Connected successfully");
+          dispatch(setConnected(true));
+          reconnectAttemptRef.current = 0;
+          dispatch(fetchUnreadCount());
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              const trimmedLine = line.trim();
+              if (!trimmedLine || !trimmedLine.startsWith("data:")) continue;
+
+              try {
+                const dataStr = trimmedLine.replace(/^data:\s*/, "");
+                const data = JSON.parse(dataStr);
+                
+                if (data.type === "heartbeat" || data.type === "connected") continue;
+
+                dispatch(addNotification(data));
+                
+                // Show toast
+                toast(data.title || "New Notification", {
+                  description: data.message,
+                  icon: <Bell className="h-4 w-4 text-[#1C8AFF]" />,
+                  action: {
+                    label: "View",
+                    onClick: () => {
+                      if (data.type === "booking_request") {
+                        router.push("/bookings?tab=requested");
+                      } else if (data.type === "new_message") {
+                        const bookingId = data.metadata?.bookingId || data.bookingId;
+                        if (bookingId) router.push(`/chat/${bookingId}`);
+                      }
+                    },
+                  },
+                });
+              } catch (parseErr) {
+                console.warn("[SSE] Parse error:", parseErr, trimmedLine);
+              }
+            }
+          }
+        } catch (err: unknown) {
+          const error = err as Error;
+          if (error.name === "AbortError") return;
+
+          console.error(`[SSE] Connection error!`, error);
+          dispatch(setConnected(false));
+          
+          // Exponential backoff reconnect
+          const ms = Math.min(30000, Math.pow(2, reconnectAttemptRef.current) * 1000);
+          reconnectAttemptRef.current += 1;
+          console.log(`[SSE] Reconnecting in ${ms}ms... (Attempt ${reconnectAttemptRef.current})`);
+          setTimeout(connect, ms);
         }
       };
 
-      es.onerror = (err) => {
-        console.error("[SSE] Error:", err);
-        es.close();
-        dispatch(setConnected(false));
-        
-        // Exponential backoff reconnect
-        const ms = Math.min(30000, Math.pow(2, reconnectAttemptRef.current) * 1000);
-        reconnectAttemptRef.current += 1;
-        setTimeout(connectSSE, ms);
+      connect();
+
+      return () => {
+        abortController.abort();
       };
     };
 
-    connectSSE();
+    const cleanup = connectSSE();
 
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
+      if (typeof cleanup === "function") cleanup();
     };
   }, [isAuthenticated, token, dispatch, router]);
 

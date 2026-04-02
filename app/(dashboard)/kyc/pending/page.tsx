@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState } from "@/lib/store/store";
-import { setOnboardingStatus } from "@/lib/store/slices/authSlice";
+import { setOnboardingStatus, loginSuccess } from "@/lib/store/slices/authSlice";
 import { expertApi } from "@/lib/api/expert";
+import { apiClient } from "@/lib/api/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Clock, CheckCircle2, RefreshCw, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
 
 export default function KycPendingPage() {
   const router = useRouter();
@@ -25,6 +27,18 @@ export default function KycPendingPage() {
     }
   }, [isAuthenticated, router]);
 
+  useEffect(() => {
+    if (!isAuthenticated || onboardingStatus?.kyc?.status === "VERIFIED") return;
+    
+    const interval = setInterval(() => {
+      if (!refreshing) {
+        handleRefresh();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, onboardingStatus?.kyc?.status, refreshing]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
@@ -32,7 +46,14 @@ export default function KycPendingPage() {
       dispatch(setOnboardingStatus(status));
 
       if (status.kyc?.status === "VERIFIED") {
-        router.push("/dashboard");
+        try {
+          const authRes = await apiClient<{ accessToken: string; user: any }>("/auth/refresh", { method: "POST" });
+          dispatch(loginSuccess({ user: authRes.user, token: authRes.accessToken }));
+          toast.success("KYC Verified! You now have expert access.");
+        } catch (err) {
+           console.error('Failed to refresh token', err);
+        }
+        router.push("/kyc");
       } else if (status.kyc?.status === "REJECTED") {
         router.push("/kyc");
       }

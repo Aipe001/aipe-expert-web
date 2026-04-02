@@ -3,9 +3,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { RootState } from "@/lib/store/store";
-import { expertApi, KycTemplate, KycTemplateStep } from "@/lib/api/expert";
+import { setOnboardingStatus } from "@/lib/store/slices/authSlice";
+import { expertApi, KycTemplate, KycTemplateStep, BookAnExpertPlan, ExpertProfile } from "@/lib/api/expert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ShieldCheck, AlertCircle, Upload, CheckCircle2, Check } from "lucide-react";
+import { Loader2, ShieldCheck, AlertCircle, Upload, CheckCircle2, Check, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 interface StepData {
@@ -34,6 +35,8 @@ interface StepData {
   documentBackUrl?: string;
   documentFrontName?: string;
   documentBackName?: string;
+  documentFrontFile?: File;
+  documentBackFile?: File;
 }
 
 const STEPS = [
@@ -48,7 +51,8 @@ export default function KycPage() {
   const { isAuthenticated, onboardingStatus } = useSelector(
     (state: RootState) => state.auth,
   );
-  
+  const dispatch = useDispatch();
+
   const [activeTab, setActiveTab] = useState("expert-kyc");
   const [template, setTemplate] = useState<KycTemplate | null>(null);
   const [stepData, setStepData] = useState<Record<string, StepData>>({});
@@ -56,7 +60,13 @@ export default function KycPage() {
   const [submitting, setSubmitting] = useState(false);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const kycStatus = onboardingStatus?.kyc?.status;
+  const [availablePlans, setAvailablePlans] = useState<BookAnExpertPlan[]>([]);
+  const [subscribedPlanIds, setSubscribedPlanIds] = useState<Set<string>>(new Set());
+  const [togglingPlanId, setTogglingPlanId] = useState<string | null>(null);
+
+  const [localSubmissionStatus, setLocalSubmissionStatus] = useState<string | null>(null);
+
+  const kycStatus = onboardingStatus?.kyc?.status || localSubmissionStatus;
   const rejectionReason = onboardingStatus?.kyc?.rejectionReason;
 
   useEffect(() => {
@@ -66,28 +76,105 @@ export default function KycPage() {
     }
     (async () => {
       try {
+        const status = await expertApi.getOnboardingStatus();
+        dispatch(setOnboardingStatus(status));
+
+        if (["SUBMITTED", "UNDER_REVIEW", "VERIFIED"].includes(status.kyc?.status || "")) {
+          // We no longer redirect to pending globally, handled inside the tabs now
+        }
+
         const tmpl = await expertApi.getKycTemplateByType("expert");
         if (tmpl) {
           setTemplate(tmpl);
           const initial: Record<string, StepData> = {};
-          tmpl.steps.forEach((step) => {
-            initial[step.id] = {};
-          });
+          
+          try {
+            const submissions = await expertApi.getMyKycSubmissions();
+            const lastSub = submissions.find(s => s.kycTemplateId === tmpl.id);
+            if (lastSub) {
+              const subStatus = lastSub.status.toUpperCase();
+              setLocalSubmissionStatus(subStatus);
+              if (["APPROVED", "VERIFIED"].includes(subStatus)) {
+                setActiveTab("subscription");
+              }
+            }
+
+            if (lastSub && lastSub.documents) {
+              tmpl.steps.forEach((step) => {
+                const doc = lastSub.documents?.find(d => d.kycTemplateStepId === step.id);
+                initial[step.id] = {
+                  documentFrontUrl: doc?.documentFrontUrl,
+                  documentBackUrl: doc?.documentBackUrl,
+                  documentFrontName: doc?.documentOriginalName || (doc?.documentFrontUrl ? "Previously Submitted" : undefined),
+                  documentBackName: doc?.documentBackUrl ? "Previously Submitted" : undefined,
+                  fieldValue: doc?.fieldValue,
+                };
+              });
+            } else {
+              tmpl.steps.forEach((step) => {
+                initial[step.id] = {};
+              });
+            }
+          } catch (e) {
+            tmpl.steps.forEach((step) => {
+              initial[step.id] = {};
+            });
+          }
           setStepData(initial);
         }
+
+        try {
+          const [plans, profile] = await Promise.all([
+            expertApi.getAvailableBookAnExpertPlans(),
+            expertApi.getMyProfile(),
+          ]);
+          setAvailablePlans(plans || []);
+          if (profile && profile.bookAnExpertSubscriptions) {
+            setSubscribedPlanIds(new Set(profile.bookAnExpertSubscriptions.map(p => p.id)));
+          }
+        } catch (planError) {
+          console.error("Failed to load plans", planError);
+        }
       } catch (err) {
-        console.error("Failed to load KYC template:", err);
+        console.error("Failed to load KYC template or status:", err);
       } finally {
         setLoading(false);
       }
     })();
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, dispatch]);
 
   const updateStepData = (stepId: string, updates: Partial<StepData>) => {
     setStepData((prev) => ({
       ...prev,
       [stepId]: { ...prev[stepId], ...updates },
     }));
+  };
+
+  const handleToggleSubscription = async (planId: string, isSubscribed: boolean) => {
+    setTogglingPlanId(planId);
+    try {
+      if (isSubscribed) {
+        await expertApi.unsubscribeBookAnExpert(planId);
+        setSubscribedPlanIds(prev => {
+          const next = new Set(prev);
+          next.delete(planId);
+          return next;
+        });
+        toast.success("Subscription removed");
+      } else {
+        await expertApi.subscribeBookAnExpert(planId);
+        setSubscribedPlanIds(prev => {
+          const next = new Set(prev);
+          next.add(planId);
+          return next;
+        });
+        toast.success("Successfully subscribed");
+      }
+    } catch (error) {
+      toast.error("Failed to update subscription");
+    } finally {
+      setTogglingPlanId(null);
+    }
   };
 
   const handleFileChange = (step: KycTemplateStep, side: "front" | "back", e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,9 +191,9 @@ export default function KycPage() {
 
     const url = URL.createObjectURL(file);
     if (side === "front") {
-      updateStepData(step.id, { documentFrontUrl: url, documentFrontName: file.name });
+      updateStepData(step.id, { documentFrontUrl: url, documentFrontName: file.name, documentFrontFile: file });
     } else {
-      updateStepData(step.id, { documentBackUrl: url, documentBackName: file.name });
+      updateStepData(step.id, { documentBackUrl: url, documentBackName: file.name, documentBackFile: file });
     }
   };
 
@@ -130,19 +217,32 @@ export default function KycPage() {
     if (!template || !isValid()) return;
     setSubmitting(true);
     try {
-      const documents = template.steps.map((step) => {
+      const submissions = await Promise.all(template.steps.map(async (step) => {
         const data = stepData[step.id] || {};
+        
+        let frontUrl = data.documentFrontUrl;
+        if (data.documentFrontFile) {
+          const res = await expertApi.uploadFile(data.documentFrontFile);
+          frontUrl = res.url;
+        }
+
+        let backUrl = data.documentBackUrl;
+        if (data.documentBackFile) {
+          const res = await expertApi.uploadFile(data.documentBackFile);
+          backUrl = res.url;
+        }
+
         return {
           kycTemplateStepId: step.id,
           fieldValue: data.fieldValue || undefined,
-          documentFrontUrl: data.documentFrontUrl || undefined,
-          documentBackUrl: data.documentBackUrl || undefined,
+          documentFrontUrl: frontUrl && !frontUrl.startsWith("blob:") ? frontUrl : undefined,
+          documentBackUrl: backUrl && !backUrl.startsWith("blob:") ? backUrl : undefined,
         };
-      });
+      }));
 
       await expertApi.submitKycSubmission({
         kycTemplateId: template.id,
-        documents,
+        submissions,
       });
       toast.success("KYC documents submitted successfully!");
       router.push("/kyc/pending");
@@ -280,7 +380,10 @@ export default function KycPage() {
 
           {STEPS.map((step, index) => {
             const isActive = activeTab === step.id;
-            const isCompleted = STEPS.findIndex(s => s.id === activeTab) > index;
+            // First step is verified if status is APPROVED/VERIFIED
+            const isStep0Completed = index === 0 && ["APPROVED", "VERIFIED"].includes(localSubmissionStatus || "");
+            const isStep1Completed = index === 1 && subscribedPlanIds.size > 0;
+            const isCompleted = isStep0Completed || isStep1Completed || STEPS.findIndex(s => s.id === activeTab) > index;
 
             return (
               <div key={step.id} className="relative z-10 flex flex-col items-center flex-1 group" onClick={() => setActiveTab(step.id)}>
@@ -379,6 +482,23 @@ export default function KycPage() {
                   <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
                   <p className="text-muted-foreground">KYC template not available.</p>
                 </div>
+              ) : ["SUBMITTED", "UNDER_REVIEW"].includes(localSubmissionStatus || "") ? (
+                <div className="py-12 flex flex-col items-center text-center">
+                  <Clock className="h-12 w-12 text-primary mb-4" />
+                  <h3 className="text-xl font-medium">KYC Under Review</h3>
+                  <p className="text-muted-foreground mt-2 max-w-sm">
+                    Your KYC documents have been submitted and are being reviewed by our team. This usually takes 24-48 hours.
+                  </p>
+                </div>
+              ) : ["APPROVED", "VERIFIED"].includes(localSubmissionStatus || "") ? (
+                <div className="py-12 flex flex-col items-center text-center">
+                  <CheckCircle2 className="h-12 w-12 text-green-600 mb-4" />
+                  <h3 className="text-xl font-medium text-green-700">KYC Verified!</h3>
+                  <p className="text-muted-foreground mt-2">
+                    Your identity has been verified. You can proceed to the next step.
+                  </p>
+                  <Button className="mt-6" onClick={() => setActiveTab("subscription")}>Next Step</Button>
+                </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {[...template.steps]
@@ -404,10 +524,49 @@ export default function KycPage() {
               <CardDescription>Select and manage your subscription packages.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="py-12 flex flex-col items-center text-center">
-                 <p className="text-muted-foreground">Select a subscription plan to get started (Placeholder)</p>
-                 <Button className="mt-4" onClick={() => setActiveTab("category-kyc")}>Next Step</Button>
-              </div>
+              {availablePlans.length === 0 ? (
+                <div className="py-12 flex flex-col items-center text-center">
+                  <p className="text-muted-foreground">No subscription plans available at the moment.</p>
+                  <Button className="mt-4" onClick={() => setActiveTab("category-kyc")}>Next Step</Button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {availablePlans.map((plan) => {
+                      const isSubscribed = subscribedPlanIds.has(plan.id);
+                      return (
+                        <div key={plan.id} className={`rounded-xl border p-5 relative transition-colors ${isSubscribed ? "border-primary bg-primary/5" : "hover:border-primary/50"}`}>
+                          <div className="flex justify-between items-start mb-2">
+                            <h4 className="font-semibold">{plan.name}</h4>
+                            {isSubscribed && <Badge variant="default" className="bg-primary/20 text-primary hover:bg-primary/20">Subscribed</Badge>}
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-4">{plan.description}</p>
+                          <div className="flex justify-between items-center mt-auto">
+                            <span className="text-sm font-medium">
+                              {plan.pricingTiers?.[0] ? `₹${plan.pricingTiers[0].price} / ${plan.pricingTiers[0].durationMinutes}m` : "Custom Pricing"}
+                            </span>
+                            <Button 
+                              variant={isSubscribed ? "destructive" : "default"}
+                              size="sm"
+                              className={isSubscribed ? "" : "bg-[#1C8AFF] hover:bg-[#1C8AFF]/90"}
+                              disabled={togglingPlanId === plan.id}
+                              onClick={() => handleToggleSubscription(plan.id, isSubscribed)}
+                            >
+                              {togglingPlanId === plan.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              {isSubscribed ? "Remove" : "Subscribe"}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-end pt-4">
+                    <Button onClick={() => setActiveTab("category-kyc")} disabled={subscribedPlanIds.size === 0}>
+                      {subscribedPlanIds.size === 0 ? "Subscribe to continue" : "Next Step"}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </TabsContent>
 

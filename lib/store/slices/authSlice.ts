@@ -1,5 +1,10 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
+export interface Role {
+  id: string;
+  name: string;
+}
+
 export interface User {
   id: string;
   firstName?: string | null;
@@ -9,6 +14,7 @@ export interface User {
   status?: string;
   isExpert?: boolean;
   profilePhoto?: string;
+  role?: Role;
 }
 
 export interface OnboardingStatus {

@@ -39,6 +39,26 @@ export interface WithdrawalRequest {
   amount: number;
 }
 
+export interface PricingTier {
+  durationMinutes: number;
+  price: number;
+}
+
+export interface BookAnExpertPlan {
+  id: string;
+  name: string;
+  description: string;
+  pricingTiers: PricingTier[];
+}
+
+export interface ExpertProfile {
+  id: string;
+  status: string;
+  userId: string;
+  isVerified: boolean;
+  bookAnExpertSubscriptions?: BookAnExpertPlan[];
+}
+
 // ── KYC Templates & Submissions (new system) ────────────────
 export interface KycDocumentTypeDef {
   id: string;
@@ -69,6 +89,15 @@ export interface KycTemplate {
   steps: KycTemplateStep[];
 }
 
+export interface KycSubmissionDocument {
+  id: string;
+  kycTemplateStepId: string;
+  documentFrontUrl?: string;
+  documentBackUrl?: string;
+  documentOriginalName?: string;
+  fieldValue?: string;
+}
+
 export interface KycSubmission {
   id: string;
   kycTemplateId: string;
@@ -76,6 +105,7 @@ export interface KycSubmission {
   rejectionReason?: string;
   reviewNote?: string;
   submittedAt?: string;
+  documents?: KycSubmissionDocument[];
 }
 
 export const expertApi = {
@@ -120,6 +150,27 @@ export const expertApi = {
     return apiClient<any[]>(`/reviews/expert/${expertId}`);
   },
 
+  // ── Book An Expert Subscriptions ────────────────────────────
+  getAvailableBookAnExpertPlans: async (): Promise<BookAnExpertPlan[]> => {
+    return apiClient<BookAnExpertPlan[]>("/book-an-expert/active");
+  },
+
+  getMyProfile: async (): Promise<ExpertProfile> => {
+    return apiClient<ExpertProfile>("/experts/my/profile");
+  },
+
+  subscribeBookAnExpert: async (planId: string): Promise<{ message: string }> => {
+    return apiClient<{ message: string }>(`/experts/my/book-an-expert/${planId}`, {
+      method: "POST",
+    });
+  },
+
+  unsubscribeBookAnExpert: async (planId: string): Promise<{ message: string }> => {
+    return apiClient<{ message: string }>(`/experts/my/book-an-expert/${planId}`, {
+      method: "DELETE",
+    });
+  },
+
   // ── KYC Templates & Submissions (new system) ────────────────
   getKycTemplateByType: async (kycType: string): Promise<KycTemplate | null> => {
     const templates = await apiClient<KycTemplate[]>(`/kyc-templates?kycType=${kycType}`);
@@ -133,7 +184,7 @@ export const expertApi = {
   submitKycSubmission: async (data: {
     kycTemplateId: string;
     targetId?: string;
-    documents: Array<{
+    submissions: Array<{
       kycTemplateStepId: string;
       fieldValue?: string;
       documentFrontUrl?: string;
@@ -143,6 +194,15 @@ export const expertApi = {
     return apiClient<{ message: string }>("/kyc-submissions/submit", {
       method: "POST",
       body: JSON.stringify(data),
+    });
+  },
+
+  uploadFile: async (file: File): Promise<{ url: string }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient<{ url: string }>("/assets/upload", {
+      method: "POST",
+      body: formData,
     });
   },
 

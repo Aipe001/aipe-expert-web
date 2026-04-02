@@ -12,14 +12,29 @@ import { Header } from "@/components/layout/Header";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const pathname = usePathname();
   const isChatDetail = pathname?.startsWith("/chat/");
+  const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
+
+  useEffect(() => {
+    if (isAuthenticated && user && pathname && !pathname.startsWith("/kyc")) {
+      const roleName = user.role?.name?.toLowerCase();
+      const hasPermission = roleName === "expert" || roleName === "admin" || user.isExpert;
+      
+      if (!hasPermission) {
+        toast.error("Not enough permission");
+        router.replace("/kyc");
+      }
+    }
+  }, [user, isAuthenticated, router, pathname]);
 
   return (
     <SidebarProvider>

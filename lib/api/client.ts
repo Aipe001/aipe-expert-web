@@ -14,13 +14,19 @@ export async function apiClient<T>(
   const token =
     typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
 
+  const requestHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...headers,
+  };
+
+  if (customConfig.body instanceof FormData) {
+    delete requestHeaders["Content-Type"];
+  }
+
   const config: RequestInit = {
     method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
+    headers: requestHeaders,
     ...customConfig,
   };
 

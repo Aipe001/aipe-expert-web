@@ -2,10 +2,23 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useSelector } from "react-redux";
-import { RootState } from "@/lib/store/store";
+import { useSelector, useDispatch } from "react-redux";
+import { RootState, AppDispatch } from "@/lib/store/store";
 import { getBookingById, Booking } from "@/lib/api/bookings";
-import { agoraApi, ChatMessage, AgoraSession } from "@/lib/api/agora";
+import { agoraApi, ChatMessage } from "@/lib/api/agora";
+import {
+  initiateCall,
+  setCallStatus,
+  updateCallDetails,
+  toggleMute,
+  toggleVideo,
+  toggleSpeaker,
+  endCall,
+  resetCall,
+  CallType,
+  CallState,
+} from "@/lib/store/slices/callSlice";
+import { getGlobalTracks } from "./CallManager";
 import {
   ChevronLeft,
   User,
@@ -18,8 +31,10 @@ import {
   VideoOff,
   PhoneOff,
   Volume2,
+  VolumeX,
   Send,
   Loader2,
+  RefreshCcw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -34,12 +49,11 @@ interface ChatContainerProps {
   incomingCallType?: "audio" | "video" | null;
 }
 
-type CallState = "idle" | "connecting" | "ringing" | "active" | "ended";
-type CallType = "audio" | "video";
-
 export function ChatContainer({ bookingId, joined, incomingCallType }: ChatContainerProps) {
   const router = useRouter();
+  const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { currentCall } = useSelector((state: RootState) => state.call);
 
   // Chat state
   const [booking, setBooking] = useState<Booking | null>(null);
@@ -51,28 +65,15 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
 
-  // Call state
-  const [callState, setCallState] = useState<CallState>("idle");
-  const [callType, setCallType] = useState<CallType>((incomingCallType as CallType) || "audio");
-  const [isMuted, setIsMuted] = useState(false);
-  const [isSpeaker, setIsSpeaker] = useState(false);
-  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  // Local tracks/duration
   const [callDuration, setCallDuration] = useState(0);
-  const [remoteUid, setRemoteUid] = useState<number | null>(null);
-  const [agoraSession, setAgoraSession] = useState<AgoraSession | null>(null);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const callPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const activeCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Agora Web SDK refs
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const agoraClientRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const localAudioTrackRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const localVideoTrackRef = useRef<any>(null);
   const localVideoRef = useRef<HTMLDivElement>(null);
   const remoteVideoRef = useRef<HTMLDivElement>(null);
+
+  const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -83,99 +84,87 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
     if (bookingId) {
       loadBookingAndMessages();
       startPolling();
-      // Check for an existing/incoming call (e.g. after accepting from IncomingCallModal)
-      checkExistingCall(joined ? 1 : 0);
+      // Check for an existing/incoming call session from server
+      checkExistingCall();
     }
     return () => {
       stopPolling();
       stopCallTimer();
       stopCallPoll();
-      leaveAgoraChannel();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookingId, joined]);
+  }, [bookingId]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Active call status polling — detect if remote side ended the call
+  // Handle Call Timer
   useEffect(() => {
-    if (callState === "active" && bookingId) {
-      activeCallPollRef.current = setInterval(async () => {
-        try {
-          const { status } = await agoraApi.getCallStatus(bookingId);
-          if (status === "ended" || status === "none") {
-            stopCallTimer();
-            leaveAgoraChannel();
-            setCallState("ended");
-            setTimeout(() => resetCallState(), 1500);
-          }
-        } catch {
-          // ignore
-        }
-      }, 3000);
-
-      // Safety: if no remote user joins within 15s, end call
-      const noRemoteTimeout = setTimeout(() => {
-        setRemoteUid((current) => {
-          if (current === null && callState === "active") {
-            console.log("[Call] No remote user after 15s — ending call");
-            stopCallTimer();
-            leaveAgoraChannel();
-            setCallState("ended");
-            setTimeout(() => resetCallState(), 1500);
-          }
-          return current;
-        });
-      }, 15000);
-
-      return () => {
-        if (activeCallPollRef.current) {
-          clearInterval(activeCallPollRef.current);
-          activeCallPollRef.current = null;
-        }
-        clearTimeout(noRemoteTimeout);
-      };
+    if (currentCall?.status === "active" && currentCall?.startTime) {
+      if (!callTimerRef.current) {
+        callTimerRef.current = setInterval(() => {
+          setCallDuration(Math.floor((Date.now() - currentCall.startTime!) / 1000));
+        }, 1000);
+      }
+    } else {
+      if (callTimerRef.current) {
+        clearInterval(callTimerRef.current);
+        callTimerRef.current = null;
+      }
+      setCallDuration(0);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callState, bookingId]);
+    return () => {
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+    };
+  }, [currentCall?.status, currentCall?.startTime]);
 
-  // ── Check for existing / just-accepted call ───────────
-  const checkExistingCall = async (retries = 0) => {
+  // Handle Video Rendering
+  useEffect(() => {
+    if (currentCall?.status === "active") {
+      const { audioTrack, videoTrack, client } = getGlobalTracks();
+
+      if (currentCall.callType === "video") {
+        if (currentCall.isVideoEnabled && videoTrack && localVideoRef.current) {
+          videoTrack.play(localVideoRef.current);
+        }
+
+        // Handle remote video
+        if (client) {
+          const remoteUsers = client.remoteUsers;
+          const remoteUser = remoteUsers.find((u: any) => u.uid === currentCall.remoteUid);
+          if (remoteUser && remoteUser.videoTrack && remoteVideoRef.current) {
+            remoteUser.videoTrack.play(remoteVideoRef.current);
+          }
+        }
+      }
+    }
+  }, [currentCall?.status, currentCall?.isVideoEnabled, currentCall?.remoteUid]);
+
+  const checkExistingCall = async () => {
     try {
       const result = await agoraApi.getCallStatus(bookingId);
       if (result.status === "active" && result.session) {
-        setAgoraSession(result.session);
-        const type = (result.session.sessionType === "video" ? "video" : "audio") as CallType;
-        setCallType(type);
-        setIsVideoEnabled(type === "video");
-        setCallState("active");
-        startCallTimer();
-        if (result.token && result.channelName && result.appId != null) {
-          try {
-            await joinAgoraChannel(result.appId, result.channelName, result.token, result.uid ?? 0, type === "video");
-          } catch (joinErr) {
-            console.error("Auto-join failed:", joinErr);
-            handleEndCall();
-          }
-        }
-        return;
+        // If we are already in this call in Redux, ignore
+        if (currentCall?.bookingId === bookingId && currentCall.status === "active") return;
+
+        dispatch(updateCallDetails({
+          bookingId,
+          callType: (result.session.sessionType === "video" ? "video" : "audio") as CallType,
+          status: "active",
+          agoraAppId: result.appId || undefined,
+          agoraToken: result.token || undefined,
+          agoraChannel: result.channelName || undefined,
+          agoraUid: result.uid || undefined,
+          callerName: getParticipantName(),
+          startTime: Date.now(), // Estimate or sync from server if available
+        }));
       }
-      if (result.status === "waiting" && result.session && retries < 5) {
-        setTimeout(() => checkExistingCall(retries + 1), 1500);
-        return;
-      }
-    } catch {
-      // ignore
-    }
-    if (retries > 0 && retries < 5) {
-      setTimeout(() => checkExistingCall(retries + 1), 1500);
+    } catch (err) {
+      console.error("Check existing call error:", err);
     }
   };
-
-  // ── Chat Functions ──────────────────────────────────
 
   const loadBookingAndMessages = async () => {
     try {
@@ -250,102 +239,6 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
     }
   }, [inputText, sending, bookingId, user]);
 
-  // ── Agora Functions ─────────────────────────────
-
-  const joinAgoraChannel = async (appId: string, channel: string, token: string, uid: number, isVideo: boolean) => {
-    try {
-      const AgoraRTC = (await import("agora-rtc-sdk-ng")).default;
-
-      const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-      agoraClientRef.current = client;
-
-      client.on("user-published", async (remoteUser: any, mediaType: "audio" | "video") => {
-        await client.subscribe(remoteUser, mediaType);
-        setRemoteUid(remoteUser.uid);
-
-        if (mediaType === "video" && remoteVideoRef.current) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (remoteUser as any).videoTrack?.play(remoteVideoRef.current);
-        }
-        if (mediaType === "audio") {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (remoteUser as any).audioTrack?.play();
-        }
-      });
-
-      client.on("user-unpublished", () => {
-        // Remote user stopped publishing
-      });
-
-      client.on("user-left", () => {
-        handleEndCall();
-      });
-
-      await client.join(appId, channel, token, uid);
-
-      // Create local tracks
-      let audioTrack;
-      try {
-        audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-      } catch (e: any) {
-        if (e.message?.includes("getUserMedia") || e.code === "NOT_SUPPORTED") {
-          toast.error("Browser doesn't support microphone access. Please ensure you're on a secure origin (HTTPS or localhost).");
-        } else {
-          toast.error(`Microphone error: ${e.message || "Could not access device"}`);
-        }
-        throw e;
-      }
-      localAudioTrackRef.current = audioTrack;
-
-      if (isVideo) {
-        let videoTrack;
-        try {
-          videoTrack = await AgoraRTC.createCameraVideoTrack();
-        } catch (e: any) {
-          toast.error(`Camera error: ${e.message || "Could not access camera"}`);
-          throw e;
-        }
-        localVideoTrackRef.current = videoTrack;
-        if (localVideoRef.current) {
-          videoTrack.play(localVideoRef.current);
-        }
-        await client.publish([audioTrack, videoTrack]);
-      } else {
-        await client.publish([audioTrack]);
-      }
-
-      console.log("[Agora Web] Joined channel:", channel);
-    } catch (err) {
-      console.error("[Agora Web] Failed to join:", err);
-    }
-  };
-
-  const leaveAgoraChannel = async () => {
-    try {
-      if (localAudioTrackRef.current) {
-        localAudioTrackRef.current.close();
-        localAudioTrackRef.current = null;
-      }
-      if (localVideoTrackRef.current) {
-        localVideoTrackRef.current.close();
-        localVideoTrackRef.current = null;
-      }
-      if (agoraClientRef.current) {
-        await agoraClientRef.current.leave();
-        agoraClientRef.current = null;
-      }
-    } catch (err) {
-      console.error("[Agora Web] Failed to leave:", err);
-    }
-  };
-
-  const startCallTimer = () => {
-    setCallDuration(0);
-    callTimerRef.current = setInterval(() => {
-      setCallDuration((prev) => prev + 1);
-    }, 1000);
-  };
-
   const stopCallTimer = () => {
     if (callTimerRef.current) {
       clearInterval(callTimerRef.current);
@@ -360,16 +253,6 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
     }
   };
 
-  const resetCallState = () => {
-    setCallState("idle");
-    setIsMuted(false);
-    setIsSpeaker(false);
-    setIsVideoEnabled(true);
-    setCallDuration(0);
-    setRemoteUid(null);
-    setAgoraSession(null);
-  };
-
   const formatCallDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -377,20 +260,21 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   };
 
   const handleStartCall = async (type: CallType) => {
-    if (!bookingId || callState !== "idle") return;
+    if (!bookingId || (currentCall && currentCall.status !== "idle")) return;
 
     try {
-      setCallType(type);
-      setIsVideoEnabled(type === "video");
-      setCallState("connecting");
+      dispatch(initiateCall({ bookingId, callType: type, callerName: getParticipantName() }));
 
       const result = await agoraApi.initiateCall(bookingId, type);
       if (!result?.id) throw new Error("Failed to create call session");
 
-      setAgoraSession(result);
-      setCallState("ringing");
-
-      const { token, channelName, appId, uid } = result;
+      dispatch(updateCallDetails({
+        agoraAppId: result.appId,
+        agoraToken: result.token,
+        agoraChannel: result.channelName,
+        agoraUid: result.uid,
+        status: "ringing"
+      }));
 
       // Poll for call acceptance
       callPollRef.current = setInterval(async () => {
@@ -398,20 +282,11 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
           const pollResult = await agoraApi.getCallStatus(bookingId);
           if (pollResult.status === "active") {
             stopCallPoll();
-            setCallState("active");
-            startCallTimer();
-            if (token && channelName && appId) {
-              try {
-                await joinAgoraChannel(appId, channelName, token, uid ?? 0, type === "video");
-              } catch (joinErr) {
-                console.error("Start call join failed:", joinErr);
-                handleEndCall();
-              }
-            }
+            dispatch(setCallStatus("active"));
           } else if (pollResult.status === "ended" || pollResult.status === "none") {
             stopCallPoll();
-            setCallState("ended");
-            setTimeout(() => resetCallState(), 1500);
+            dispatch(setCallStatus("ended"));
+            setTimeout(() => dispatch(resetCall()), 1500);
           }
         } catch {
           // ignore
@@ -422,54 +297,64 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
       setTimeout(() => {
         if (callPollRef.current) {
           stopCallPoll();
-          setCallState((prev) => {
-            if (prev === "ringing") {
-              agoraApi.rejectCall(bookingId).catch(() => {});
-              setTimeout(() => resetCallState(), 1500);
-              return "ended";
-            }
-            return prev;
-          });
+          agoraApi.rejectCall(bookingId).catch(() => { });
+          dispatch(setCallStatus("ended"));
+          setTimeout(() => dispatch(resetCall()), 1500);
         }
       }, 30000);
     } catch (err) {
       console.error("Failed to start call:", err);
-      setCallState("idle");
+      dispatch(resetCall());
+      toast.error("Failed to start call");
     }
   };
 
   const handleEndCall = async () => {
     stopCallTimer();
     stopCallPoll();
-    setCallState("ended");
-    await leaveAgoraChannel();
+    dispatch(setCallStatus("ended"));
 
-    if (agoraSession) {
-      try {
-        await agoraApi.endSession(agoraSession.id);
-      } catch {
-        // Silent
-      }
-    }
+    try {
+      await agoraApi.rejectCall(bookingId);
+    } catch { }
 
-    setTimeout(() => resetCallState(), 1500);
+    setTimeout(() => dispatch(resetCall()), 1500);
   };
 
-  const toggleMute = () => {
-    setIsMuted((prev) => {
-      if (localAudioTrackRef.current) {
-        localAudioTrackRef.current.setEnabled(prev);
+  const flipCamera = async () => {
+    const { videoTrack } = getGlobalTracks();
+    if (!videoTrack) return;
+
+    try {
+      const devices = await (window as any).AgoraRTC.getCameras();
+      if (devices.length > 1) {
+        // Find current device and switch to next
+        const currentId = videoTrack.getTrackLabel();
+        const nextDevice = devices.find((d: any) => d.label !== currentId) || devices[0];
+        await videoTrack.setDevice(nextDevice.deviceId);
+        toast.success("Switched camera");
+      } else {
+        toast.info("Only one camera found");
       }
-      return !prev;
+    } catch (err) {
+      console.error("Camera flip error:", err);
+    }
+  };
+
+  const toggleSpeakerMute = () => {
+    setIsSpeakerMuted((prev) => {
+      const newState = !prev;
+      const { client } = getGlobalTracks();
+      if (client) {
+        client.remoteUsers.forEach((user: any) => {
+          if (user.audioTrack) {
+            if (newState) user.audioTrack.stop();
+            else user.audioTrack.play();
+          }
+        });
+      }
+      return newState;
     });
-  };
-
-  const toggleVideo = () => {
-    if (localVideoTrackRef.current) {
-      const newState = !isVideoEnabled;
-      localVideoTrackRef.current.setEnabled(newState);
-      setIsVideoEnabled(newState);
-    }
   };
 
   // ── Helpers ─────────────────────────────────────────
@@ -494,9 +379,9 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
     });
   };
 
-  const isInCall = callState !== "idle";
-  const isVideoCall = callType === "video";
-  const isCallActive = callState === "active";
+  const isInCall = !!(currentCall && currentCall.bookingId === bookingId && currentCall.status !== "idle");
+  const isVideoCall = currentCall?.callType === "video";
+  const isCallActive = currentCall?.status === "active";
 
   const handleBack = () => {
     router.push("/chat");
@@ -585,7 +470,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
           <p className={cn(
             "text-sm font-bold capitalize",
             booking?.status === "active" ? "text-green-600" :
-            booking?.status === "completed" ? "text-blue-600" : "text-amber-600"
+              booking?.status === "completed" ? "text-blue-600" : "text-amber-600"
           )}>
             {booking?.status || "Active"}
           </p>
@@ -605,7 +490,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
               <div className="flex items-center gap-3">
                 <motion.div
                   animate={
-                    callState === "connecting" || callState === "ringing"
+                    currentCall?.status === "connecting" || currentCall?.status === "ringing"
                       ? { scale: [1, 1.15, 1] }
                       : {}
                   }
@@ -624,10 +509,10 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                 <div>
                   <p className="font-bold text-sm">{getParticipantName()}</p>
                   <p className="text-xs text-white/60">
-                    {callState === "connecting" && `Connecting${isVideoCall ? " video" : ""}...`}
-                    {callState === "ringing" && `Ringing${isVideoCall ? " (Video)" : ""}...`}
-                    {callState === "active" && `${isVideoCall ? "📹 " : ""}${formatCallDuration(callDuration)}`}
-                    {callState === "ended" && "Call ended"}
+                    {currentCall?.status === "connecting" && `Connecting${isVideoCall ? " video" : ""}...`}
+                    {currentCall?.status === "ringing" && `Ringing${isVideoCall ? " (Video)" : ""}...`}
+                    {currentCall?.status === "active" && `${isVideoCall ? "📹 " : ""}${formatCallDuration(callDuration)}`}
+                    {currentCall?.status === "ended" && "Call ended"}
                   </p>
                 </div>
               </div>
@@ -636,24 +521,42 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                 {isCallActive && (
                   <>
                     {isVideoCall && (
-                      <button
-                        onClick={toggleVideo}
-                        className={cn(
-                          "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
-                          !isVideoEnabled ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
-                        )}
-                      >
-                        {isVideoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
-                      </button>
+                      <>
+                        <button
+                          onClick={flipCamera}
+                          className="h-9 w-9 rounded-full flex items-center justify-center bg-white/20 hover:bg-white/30 transition-colors"
+                          title="Flip Camera"
+                        >
+                          <RefreshCcw className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => dispatch(toggleVideo())}
+                          className={cn(
+                            "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
+                            !currentCall?.isVideoEnabled ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
+                          )}
+                        >
+                          {currentCall?.isVideoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                        </button>
+                      </>
                     )}
                     <button
-                      onClick={toggleMute}
+                      onClick={toggleSpeakerMute}
                       className={cn(
                         "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
-                        isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
+                        isSpeakerMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
                       )}
                     >
-                      {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                      {isSpeakerMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                    </button>
+                    <button
+                      onClick={() => dispatch(toggleMute())}
+                      className={cn(
+                        "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
+                        currentCall?.isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
+                      )}
+                    >
+                      {currentCall?.isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                     </button>
                   </>
                 )}
@@ -671,7 +574,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
               <div className="relative w-full aspect-video bg-black max-h-[40vh]">
                 {/* Remote video */}
                 <div ref={remoteVideoRef} className="w-full h-full">
-                  {remoteUid === null && (
+                  {currentCall?.remoteUid === null && (
                     <div className="w-full h-full flex flex-col items-center justify-center text-white/30">
                       <Video className="h-12 w-12 mb-2" />
                       <p className="text-sm">Waiting for video...</p>
@@ -679,7 +582,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                   )}
                 </div>
                 {/* Local video (PIP) */}
-                {isVideoEnabled && (
+                {currentCall?.isVideoEnabled && (
                   <div className="absolute bottom-4 right-4 w-32 h-24 rounded-xl overflow-hidden border-2 border-white/30 shadow-lg bg-slate-800">
                     <div ref={localVideoRef} className="w-full h-full" />
                   </div>

@@ -9,6 +9,9 @@ import { Provider } from "react-redux";
 import { store } from "@/lib/store/store";
 import { AuthInitializer } from "@/components/auth/AuthInitializer";
 import { NotificationManager } from "@/components/NotificationManager";
+import { CallManager } from "@/components/chat/CallManager";
+import { GlobalCallOverlay } from "@/components/chat/GlobalCallOverlay";
+import { IncomingCallModal } from "@/components/chat/IncomingCallModal";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
@@ -19,6 +22,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <AuthInitializer />
         <TooltipProvider>
           <NotificationManager />
+          <CallManager />
+          <GlobalCallOverlay />
+          <IncomingCallModal />
           {children}
           <Toaster />
           <Sonner position="top-center" expand={true} richColors />

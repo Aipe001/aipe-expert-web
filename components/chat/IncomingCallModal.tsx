@@ -3,54 +3,35 @@
 import { useEffect, useState, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState, AppDispatch } from "@/lib/store/store";
-import { dismissNewNotification } from "@/lib/store/slices/notificationSlice";
+import { clearIncomingCall, updateCallDetails } from "@/lib/store/slices/callSlice";
 import { agoraApi } from "@/lib/api/agora";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Phone, Video, PhoneOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-
-interface IncomingCallData {
-  bookingId: string;
-  sessionId: string;
-  callerName: string;
-  callerUserId: string;
-  callType: "audio" | "video";
-}
+import { cn } from "@/lib/utils";
 
 export function IncomingCallModal() {
   const router = useRouter();
+  const pathname = usePathname();
   const dispatch = useDispatch<AppDispatch>();
-  const { newNotification } = useSelector((state: RootState) => state.notifications);
-  
-  const [callData, setCallData] = useState<IncomingCallData | null>(null);
+  const { incomingCall } = useSelector((state: RootState) => state.call);
+  const { currentCall } = useSelector((state: RootState) => state.call);
+
   const [accepting, setAccepting] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const oscillatorRef = useRef<OscillatorNode | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // If we are already in the chat for this booking and it's active, don't show the modal
   useEffect(() => {
-    if (newNotification && newNotification.type === "incoming_call") {
-      const action = newNotification.metadata?.action;
-      if (action === "ended" || action === "cancelled" || action === "rejected") {
-        dismiss();
-      } else if (action !== "accepted") {
-        setCallData({
-          bookingId: newNotification.metadata?.bookingId || newNotification.metadata?.booking?.id || "",
-          sessionId: newNotification.metadata?.sessionId || "",
-          callerName: newNotification.metadata?.callerName || "Customer",
-          callerUserId: newNotification.metadata?.callerUserId || "",
-          callType: (newNotification.metadata?.callType as "audio" | "video") || "audio",
-        });
-      }
-      // Consume the notification so it isn't processed multiple times
-      dispatch(dismissNewNotification());
+    if (incomingCall && currentCall?.bookingId === incomingCall.bookingId && currentCall?.status === "active") {
+      dispatch(clearIncomingCall());
     }
-  }, [newNotification, dispatch]);
+  }, [incomingCall, currentCall, dispatch]);
 
   // Handle ringing sound
   useEffect(() => {
-    if (callData) {
+    if (incomingCall) {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
@@ -86,7 +67,7 @@ export function IncomingCallModal() {
         clearTimeout(timeout);
       };
     }
-  }, [callData]);
+  }, [incomingCall]);
 
   const stopRinging = () => {
     if (intervalRef.current) {
@@ -94,28 +75,47 @@ export function IncomingCallModal() {
       intervalRef.current = null;
     }
     if (audioContextRef.current?.state === "running") {
-      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current.close().catch(() => { });
       audioContextRef.current = null;
     }
   };
 
   const dismiss = () => {
     stopRinging();
-    setCallData(null);
+    dispatch(clearIncomingCall());
     setAccepting(false);
   };
 
   const handleAccept = async () => {
-    if (!callData || accepting) return;
+    if (!incomingCall || accepting) return;
     setAccepting(true);
     stopRinging();
 
     try {
-      if (callData.bookingId) {
-        await agoraApi.acceptCall(callData.bookingId);
+      let result;
+      if (incomingCall.bookingId) {
+        result = await agoraApi.acceptCall(incomingCall.bookingId);
       }
+
+      const bookingId = incomingCall.bookingId;
+      const callType = incomingCall.callType;
+
+      if (result) {
+        dispatch(updateCallDetails({
+          bookingId,
+          callType,
+          status: "active",
+          agoraAppId: result.appId,
+          agoraToken: result.token,
+          agoraChannel: result.channelName,
+          agoraUid: result.uid,
+          callerName: incomingCall.callerName,
+          startTime: Date.now(),
+        }));
+      }
+
       dismiss();
-      router.push(`/chat/${callData.bookingId}?joined=1&callType=${callData.callType}`);
+      router.push(`/chat/${bookingId}`);
     } catch (err: any) {
       console.error("Failed to accept call:", err);
       setAccepting(false);
@@ -125,12 +125,12 @@ export function IncomingCallModal() {
   };
 
   const handleReject = async () => {
-    if (!callData) return;
+    if (!incomingCall) return;
     stopRinging();
-    
+
     try {
-      if (callData.bookingId) {
-        await agoraApi.rejectCall(callData.bookingId);
+      if (incomingCall.bookingId) {
+        await agoraApi.rejectCall(incomingCall.bookingId);
       }
     } catch {
       // Ignore if already ended
@@ -138,7 +138,7 @@ export function IncomingCallModal() {
     dismiss();
   };
 
-  if (!callData) return null;
+  if (!incomingCall) return null;
 
   return (
     <AnimatePresence>
@@ -171,24 +171,24 @@ export function IncomingCallModal() {
 
           <div className="w-20 h-20 bg-[#48BB78] rounded-full flex items-center justify-center z-10 mb-6 shadow-[0_0_30px_rgba(72,187,120,0.5)]">
             <motion.div
-               animate={{ rotate: [-10, 10, -10, 10, 0] }}
-               transition={{ repeat: Infinity, duration: 1.5, repeatDelay: 1 }}
+              animate={{ rotate: [-10, 10, -10, 10, 0] }}
+              transition={{ repeat: Infinity, duration: 1.5, repeatDelay: 1 }}
             >
               <Phone className="w-10 h-10 text-white fill-white" />
             </motion.div>
           </div>
 
-          <motion.p 
+          <motion.p
             animate={{ opacity: [0.5, 1, 0.5] }}
             transition={{ repeat: Infinity, duration: 2 }}
             className="text-[#48BB78] font-black text-xs tracking-[0.2em] mb-2"
           >
             INCOMING CALL
           </motion.p>
-          <h2 className="text-white text-3xl font-bold mb-1 text-center">{callData.callerName}</h2>
+          <h2 className="text-white text-3xl font-bold mb-1 text-center">{incomingCall.callerName}</h2>
           <p className="text-white/50 text-sm mb-10 flex items-center gap-2">
-            {callData.callType === "video" ? <Video className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
-            {callData.callType === "video" ? "Video Call" : "Audio Call"}
+            {incomingCall.callType === "video" ? <Video className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
+            {incomingCall.callType === "video" ? "Video Call" : "Audio Call"}
           </p>
 
           <div className="flex items-center gap-12 w-full justify-center">

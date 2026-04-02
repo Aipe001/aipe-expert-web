@@ -173,7 +173,7 @@ export default function ProfilePage() {
           <motion.div variants={itemVariants}>
             <div className="flex items-center justify-between mb-4 px-1">
               <h2 className="text-xl font-bold tracking-tight">Services Offered</h2>
-              <Badge variant="ghost" className="text-[#1C8AFF] font-bold">India Only</Badge>
+              <Badge variant="outline" className="text-[#1C8AFF] font-bold">India Only</Badge>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {services.map((service, index) => (

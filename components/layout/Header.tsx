@@ -33,7 +33,7 @@ const pageTitles: Record<string, string> = {
 export function Header() {
   const dispatch = useDispatch();
   const pathname = usePathname();
-  const {  } = useSidebar();
+  const { } = useSidebar();
   const { user } = useSelector((state: RootState) => state.auth);
 
   const initials =
@@ -62,18 +62,18 @@ export function Header() {
       </div>
 
       {/* Centered Logo and Text */}
-      <Link 
-        href="/dashboard" 
+      <Link
+        href="/dashboard"
         className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0 hover:opacity-80 transition-opacity"
       >
-        <div className="relative h-16 w-16">
+        {/* <div className="relative h-16 w-16">
           <Image
             src="/aipe_logo3.png"
             alt="AIPE"
             fill
             className="object-contain"
           />
-        </div>
+        </div> */}
         <span className="text-lg font-bold tracking-tight whitespace-nowrap">
           <span className="text-[#1C8AFF] italic">Expert Console</span>
         </span>

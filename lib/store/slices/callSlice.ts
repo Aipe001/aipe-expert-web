@@ -12,6 +12,7 @@ interface CallInfo {
     isMuted: boolean;
     isVideoEnabled: boolean;
     isSpeakerEnabled: boolean;
+    isLocalStreamActive?: boolean;
     agoraAppId?: string;
     agoraToken?: string;
     agoraChannel?: string;
@@ -40,7 +41,7 @@ const callSlice = createSlice({
     reducers: {
         setIncomingCall: (state, action: PayloadAction<GlobalCallState["incomingCall"]>) => {
             // Don't show incoming call if we're already in an active call for the same booking
-            if (state.currentCall && state.currentCall.bookingId === action.payload?.bookingId && state.currentCall.status !== "idle") {
+            if (state.currentCall && String(state.currentCall.bookingId) === String(action.payload?.bookingId) && state.currentCall.status !== "idle") {
                 return;
             }
             state.incomingCall = action.payload;
@@ -76,6 +77,17 @@ const callSlice = createSlice({
         updateCallDetails: (state, action: PayloadAction<Partial<CallInfo>>) => {
             if (state.currentCall) {
                 state.currentCall = { ...state.currentCall, ...action.payload };
+            } else if (action.payload.bookingId && action.payload.callType && action.payload.status) {
+                // If we don't have currentCall but we have enough info to create it (for incoming calls)
+                state.currentCall = {
+                    bookingId: action.payload.bookingId,
+                    callType: action.payload.callType,
+                    status: action.payload.status,
+                    isMuted: false,
+                    isVideoEnabled: action.payload.callType === "video",
+                    isSpeakerEnabled: true,
+                    ...action.payload
+                } as CallInfo;
             }
         },
         toggleMute: (state) => {

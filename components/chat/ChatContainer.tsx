@@ -8,6 +8,7 @@ import { getBookingById, Booking } from "@/lib/api/bookings";
 import { agoraApi, ChatMessage } from "@/lib/api/agora";
 import {
   initiateCall,
+  setIncomingCall,
   setCallStatus,
   updateCallDetails,
   toggleMute,
@@ -53,7 +54,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { currentCall } = useSelector((state: RootState) => state.call);
+  const { currentCall, incomingCall } = useSelector((state: RootState) => state.call);
 
   // Chat state
   const [booking, setBooking] = useState<Booking | null>(null);
@@ -140,7 +141,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
         }
       }
     }
-  }, [currentCall?.status, currentCall?.isVideoEnabled, currentCall?.remoteUid]);
+  }, [currentCall?.status, currentCall?.isVideoEnabled, currentCall?.remoteUid, currentCall?.isLocalStreamActive]);
 
   const checkExistingCall = async () => {
     try {
@@ -159,6 +160,14 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
           agoraUid: result.uid || undefined,
           callerName: getParticipantName(),
           startTime: Date.now(), // Estimate or sync from server if available
+        }));
+      } else if (result.status === "waiting" && result.session && result.session.callerUserId !== user?.id) {
+        // There is an incoming call waiting for us
+        dispatch(setIncomingCall({
+          bookingId,
+          callerName: getParticipantName(),
+          callType: (result.session.sessionType === "video" ? "video" : "audio") as CallType,
+          sessionId: result.session.id,
         }));
       }
     } catch (err) {
@@ -263,6 +272,28 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
     if (!bookingId || (currentCall && currentCall.status !== "idle")) return;
 
     try {
+      // Check if there's an incoming call for this booking that we should accept instead
+      const statusCheck = await agoraApi.getCallStatus(bookingId);
+
+      if (statusCheck.status === "waiting" && statusCheck.session && statusCheck.session.callerUserId !== user?.id) {
+        toast.info("Answering incoming call...");
+        const result = await agoraApi.acceptCall(bookingId);
+        if (result) {
+          dispatch(updateCallDetails({
+            bookingId,
+            callType: (result.sessionType === "video" ? "video" : "audio") as CallType,
+            status: "active",
+            agoraAppId: result.appId,
+            agoraToken: result.token,
+            agoraChannel: result.channelName,
+            agoraUid: result.uid,
+            callerName: getParticipantName(),
+            startTime: Date.now(),
+          }));
+          return;
+        }
+      }
+
       dispatch(initiateCall({ bookingId, callType: type, callerName: getParticipantName() }));
 
       const result = await agoraApi.initiateCall(bookingId, type);

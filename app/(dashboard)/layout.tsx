@@ -30,7 +30,7 @@ export default function DashboardLayout({
       const roleName = user.role?.name?.toLowerCase();
       const isOkStatus = ["kyc_verified", "bank_submitted", "bank_verified", "completed"].includes(onboardingStatus?.onboardingStatus || "");
       const hasPermission = roleName === "expert" || roleName === "admin" || user.isExpert || isOkStatus;
-      
+
       if (!hasPermission) {
         toast.error("Not enough permission");
         router.replace("/kyc");
@@ -40,7 +40,6 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider>
-      <IncomingCallModal />
       <ExpertSidebar />
       <SidebarInset>
         <Header />

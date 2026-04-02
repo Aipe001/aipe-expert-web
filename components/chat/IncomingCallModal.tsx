@@ -39,6 +39,9 @@ export function IncomingCallModal() {
       const playRing = () => {
         if (!audioContextRef.current) return;
         const ctx = audioContextRef.current;
+        if (ctx.state === "suspended") {
+          ctx.resume().catch(() => { });
+        }
         const osc = ctx.createOscillator();
         const gainNode = ctx.createGain();
         osc.type = "sine";

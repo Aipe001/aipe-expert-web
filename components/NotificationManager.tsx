@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/lib/store/store";
 import { addNotification, setConnected, fetchUnreadCount, dismissNewNotification } from "@/lib/store/slices/notificationSlice";
-import { setIncomingCall, clearIncomingCall } from "@/lib/store/slices/callSlice";
+import { setIncomingCall, clearIncomingCall, setCallStatus, resetCall } from "@/lib/store/slices/callSlice";
 import { toast } from "sonner";
 import { Bell } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -13,9 +13,15 @@ import { API_BASE_URL } from "@/lib/api/client";
 export function NotificationManager() {
   const dispatch = useDispatch<AppDispatch>();
   const router = useRouter();
-  const { isAuthenticated, token } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, user, token } = useSelector((state: RootState) => state.auth);
+  const { currentCall } = useSelector((state: RootState) => state.call);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectAttemptRef = useRef(0);
+  const currentCallRef = useRef(currentCall);
+
+  useEffect(() => {
+    currentCallRef.current = currentCall;
+  }, [currentCall]);
 
   useEffect(() => {
     if (!isAuthenticated || !token) {
@@ -88,26 +94,60 @@ export function NotificationManager() {
               try {
                 const dataStr = trimmedLine.replace(/^data:\s*/, "");
                 const data = JSON.parse(dataStr);
+                const metadata = data.data || {};
+                const actorId = data.actorId || data.senderId || metadata.actorId || metadata.senderId || metadata.callerUserId || metadata.callerId || metadata.caller_user_id || metadata.caller_id || metadata.actor_id;
+
+                // Ignore ANY notification triggered by ourselves
+                if (actorId && user?.id && String(actorId) === String(user.id)) {
+                  // Special case: if we see our own call being accepted, update state
+                  const bookingId = metadata.bookingId || metadata.booking?.id || data.bookingId;
+                  if (data.type === "incoming_call" && metadata.action === "accepted" && currentCallRef.current && String(currentCallRef.current.bookingId) === String(bookingId)) {
+                    dispatch(setCallStatus("active"));
+                  }
+                  return;
+                }
 
                 if (data.type === "incoming_call") {
-                  const action = data.metadata?.action;
-                  const bookingId = data.metadata?.bookingId || data.metadata?.booking?.id || "";
+                  const action = metadata.action;
+                  const bookingId = metadata.bookingId || metadata.booking?.id || data.bookingId || "";
+                  const callerUserId = metadata.callerUserId || metadata.callerId || metadata.caller_user_id || metadata.caller_id || data.senderId || data.actorId;
+
+                  // 1. Ignore if we initiated this call
+                  if (callerUserId && user?.id && String(callerUserId) === String(user.id)) {
+                    // But if it's accepted, update the call state
+                    if (action === "accepted" && currentCallRef.current && String(currentCallRef.current.bookingId) === String(bookingId)) {
+                      dispatch(setCallStatus("active"));
+                    }
+                    return;
+                  }
 
                   if (action === "ended" || action === "cancelled" || action === "rejected" || action === "missed") {
+                    // Always clear incoming call for this booking
                     dispatch(clearIncomingCall());
+
+                    if (currentCallRef.current && String(currentCallRef.current.bookingId) === String(bookingId)) {
+                      dispatch(setCallStatus("ended"));
+                      setTimeout(() => dispatch(resetCall()), 2000);
+                    }
                   } else if (action === "accepted") {
-                    // Handled by acceptor, or sync state elsewhere
+                    if (currentCallRef.current && String(currentCallRef.current.bookingId) === String(bookingId)) {
+                      dispatch(setCallStatus("active"));
+                    }
+                    dispatch(clearIncomingCall());
                   } else {
-                    dispatch(setIncomingCall({
-                      bookingId,
-                      sessionId: data.metadata?.sessionId || "",
-                      callerName: data.metadata?.callerName || "Customer",
-                      callType: (data.metadata?.callType as any) || "audio",
-                    }));
+                    // Only show incoming call if we're not already in this specific call
+                    const isIdle = !currentCallRef.current || currentCallRef.current.status === "idle";
+                    const isSameBooking = currentCallRef.current && String(currentCallRef.current.bookingId) === String(bookingId);
+
+                    if (!isSameBooking || isIdle) {
+                      dispatch(setIncomingCall({
+                        bookingId: String(bookingId),
+                        sessionId: metadata.sessionId || "",
+                        callerName: metadata.callerName || "Customer",
+                        callType: (metadata.callType as any) || "audio",
+                      }));
+                    }
                   }
-                  // We also consume the notification from notificationSlice by not calling addNotification if we want to bypass redundant storage, 
-                  // but addNotification puts it in the state. IncomingCallModal currently watches newNotification. 
-                  // Let's keep addNotification for now but fix IncomingCallModal to use callSlice.
                 }
 
                 dispatch(addNotification(data));

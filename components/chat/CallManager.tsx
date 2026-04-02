@@ -28,6 +28,11 @@ export function CallManager() {
             joinChannel();
         }
 
+        if (currentCall?.status === "ended" && globalAgoraClient) {
+            console.log("[CallManager] Call ended, disconnecting...");
+            handleDisconnect();
+        }
+
         // Check if call was ended externally
         if (currentCall?.status === "active" && !activeCallPollRef.current) {
             activeCallPollRef.current = setInterval(async () => {
@@ -92,6 +97,7 @@ export function CallManager() {
                 await client.publish([audioTrack]);
             }
 
+            dispatch(updateCallDetails({ isLocalStreamActive: true }));
             console.log("[CallManager] Joined & Published successfully");
         } catch (err) {
             console.error("[CallManager] Join error:", err);
@@ -101,6 +107,7 @@ export function CallManager() {
     };
 
     const handleDisconnect = async () => {
+        dispatch(updateCallDetails({ isLocalStreamActive: false }));
         if (globalLocalAudioTrack) {
             globalLocalAudioTrack.close();
             globalLocalAudioTrack = null;

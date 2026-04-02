@@ -37,7 +37,7 @@ export const fetchNotifications = createAsyncThunk(
 export const fetchUnreadCount = createAsyncThunk(
   "notifications/fetchUnreadCount",
   async () => {
-    return apiClient<{ count: number }>("/notifications/unread-count");
+    return apiClient<{ count: number }>("/notifications/unread/count");
   }
 );
 

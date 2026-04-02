@@ -20,22 +20,24 @@ import {
   Volume2,
   Send,
   Loader2,
-  SwitchCamera,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 
 interface ChatContainerProps {
   bookingId: string;
+  joined?: boolean;
+  incomingCallType?: "audio" | "video" | null;
 }
 
 type CallState = "idle" | "connecting" | "ringing" | "active" | "ended";
 type CallType = "audio" | "video";
 
-export function ChatContainer({ bookingId }: ChatContainerProps) {
+export function ChatContainer({ bookingId, joined, incomingCallType }: ChatContainerProps) {
   const router = useRouter();
   const { user } = useSelector((state: RootState) => state.auth);
 
@@ -51,7 +53,7 @@ export function ChatContainer({ bookingId }: ChatContainerProps) {
 
   // Call state
   const [callState, setCallState] = useState<CallState>("idle");
-  const [callType, setCallType] = useState<CallType>("audio");
+  const [callType, setCallType] = useState<CallType>((incomingCallType as CallType) || "audio");
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeaker, setIsSpeaker] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -81,6 +83,8 @@ export function ChatContainer({ bookingId }: ChatContainerProps) {
     if (bookingId) {
       loadBookingAndMessages();
       startPolling();
+      // Check for an existing/incoming call (e.g. after accepting from IncomingCallModal)
+      checkExistingCall(joined ? 1 : 0);
     }
     return () => {
       stopPolling();
@@ -88,14 +92,15 @@ export function ChatContainer({ bookingId }: ChatContainerProps) {
       stopCallPoll();
       leaveAgoraChannel();
     };
-  }, [bookingId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingId, joined]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Active call status polling
+  // Active call status polling — detect if remote side ended the call
   useEffect(() => {
     if (callState === "active" && bookingId) {
       activeCallPollRef.current = setInterval(async () => {
@@ -112,14 +117,63 @@ export function ChatContainer({ bookingId }: ChatContainerProps) {
         }
       }, 3000);
 
+      // Safety: if no remote user joins within 15s, end call
+      const noRemoteTimeout = setTimeout(() => {
+        setRemoteUid((current) => {
+          if (current === null && callState === "active") {
+            console.log("[Call] No remote user after 15s — ending call");
+            stopCallTimer();
+            leaveAgoraChannel();
+            setCallState("ended");
+            setTimeout(() => resetCallState(), 1500);
+          }
+          return current;
+        });
+      }, 15000);
+
       return () => {
         if (activeCallPollRef.current) {
           clearInterval(activeCallPollRef.current);
           activeCallPollRef.current = null;
         }
+        clearTimeout(noRemoteTimeout);
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callState, bookingId]);
+
+  // ── Check for existing / just-accepted call ───────────
+  const checkExistingCall = async (retries = 0) => {
+    try {
+      const result = await agoraApi.getCallStatus(bookingId);
+      if (result.status === "active" && result.session) {
+        setAgoraSession(result.session);
+        const type = (result.session.sessionType === "video" ? "video" : "audio") as CallType;
+        setCallType(type);
+        setIsVideoEnabled(type === "video");
+        setCallState("active");
+        startCallTimer();
+        if (result.token && result.channelName && result.appId != null) {
+          try {
+            await joinAgoraChannel(result.appId, result.channelName, result.token, result.uid ?? 0, type === "video");
+          } catch (joinErr) {
+            console.error("Auto-join failed:", joinErr);
+            handleEndCall();
+          }
+        }
+        return;
+      }
+      if (result.status === "waiting" && result.session && retries < 5) {
+        setTimeout(() => checkExistingCall(retries + 1), 1500);
+        return;
+      }
+    } catch {
+      // ignore
+    }
+    if (retries > 0 && retries < 5) {
+      setTimeout(() => checkExistingCall(retries + 1), 1500);
+    }
+  };
 
   // ── Chat Functions ──────────────────────────────────
 
@@ -205,7 +259,7 @@ export function ChatContainer({ bookingId }: ChatContainerProps) {
       const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
       agoraClientRef.current = client;
 
-      client.on("user-published", async (remoteUser: { uid: number }, mediaType: "audio" | "video") => {
+      client.on("user-published", async (remoteUser: any, mediaType: "audio" | "video") => {
         await client.subscribe(remoteUser, mediaType);
         setRemoteUid(remoteUser.uid);
 
@@ -230,11 +284,27 @@ export function ChatContainer({ bookingId }: ChatContainerProps) {
       await client.join(appId, channel, token, uid);
 
       // Create local tracks
-      const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+      let audioTrack;
+      try {
+        audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+      } catch (e: any) {
+        if (e.message?.includes("getUserMedia") || e.code === "NOT_SUPPORTED") {
+          toast.error("Browser doesn't support microphone access. Please ensure you're on a secure origin (HTTPS or localhost).");
+        } else {
+          toast.error(`Microphone error: ${e.message || "Could not access device"}`);
+        }
+        throw e;
+      }
       localAudioTrackRef.current = audioTrack;
 
       if (isVideo) {
-        const videoTrack = await AgoraRTC.createCameraVideoTrack();
+        let videoTrack;
+        try {
+          videoTrack = await AgoraRTC.createCameraVideoTrack();
+        } catch (e: any) {
+          toast.error(`Camera error: ${e.message || "Could not access camera"}`);
+          throw e;
+        }
         localVideoTrackRef.current = videoTrack;
         if (localVideoRef.current) {
           videoTrack.play(localVideoRef.current);
@@ -331,7 +401,12 @@ export function ChatContainer({ bookingId }: ChatContainerProps) {
             setCallState("active");
             startCallTimer();
             if (token && channelName && appId) {
-              await joinAgoraChannel(appId, channelName, token, uid ?? 0, type === "video");
+              try {
+                await joinAgoraChannel(appId, channelName, token, uid ?? 0, type === "video");
+              } catch (joinErr) {
+                console.error("Start call join failed:", joinErr);
+                handleEndCall();
+              }
             }
           } else if (pollResult.status === "ended" || pollResult.status === "none") {
             stopCallPoll();

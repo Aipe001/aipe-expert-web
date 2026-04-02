@@ -9,6 +9,7 @@ import { expertApi } from "@/lib/api/expert";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ExpertSidebar } from "@/components/layout/ExpertSidebar";
 import { Header } from "@/components/layout/Header";
+import { IncomingCallModal } from "@/components/chat/IncomingCallModal";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
@@ -22,22 +23,24 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const isChatDetail = pathname?.startsWith("/chat/");
-  const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
+  const { user, isAuthenticated, onboardingStatus } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
     if (isAuthenticated && user && pathname && !pathname.startsWith("/kyc")) {
       const roleName = user.role?.name?.toLowerCase();
-      const hasPermission = roleName === "expert" || roleName === "admin" || user.isExpert;
+      const isOkStatus = ["kyc_verified", "bank_submitted", "bank_verified", "completed"].includes(onboardingStatus?.onboardingStatus || "");
+      const hasPermission = roleName === "expert" || roleName === "admin" || user.isExpert || isOkStatus;
       
       if (!hasPermission) {
         toast.error("Not enough permission");
         router.replace("/kyc");
       }
     }
-  }, [user, isAuthenticated, router, pathname]);
+  }, [user, isAuthenticated, onboardingStatus, router, pathname]);
 
   return (
     <SidebarProvider>
+      <IncomingCallModal />
       <ExpertSidebar />
       <SidebarInset>
         <Header />

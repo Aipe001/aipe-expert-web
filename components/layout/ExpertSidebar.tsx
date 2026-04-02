@@ -86,11 +86,14 @@ export function ExpertSidebar() {
 
   const isAuthorized =
     user?.isExpert ||
+    typedUser?.role?.name === "expert" ||
     typedUser?.role?.name === "admin" ||
     typedUser?.role?.name === "super_admin" ||
+    typedUser?.roleName === "expert" ||
     typedUser?.roleName === "admin" ||
     typedUser?.roleName === "super_admin" ||
-    onboardingStatus?.kyc?.status === "VERIFIED";
+    ["VERIFIED", "APPROVED", "verified", "approved"].includes(onboardingStatus?.kyc?.status || "") ||
+    ["kyc_verified", "bank_submitted", "bank_verified", "completed"].includes(onboardingStatus?.onboardingStatus || "");
 
   const initials =
     (user?.firstName?.[0] || "") + (user?.lastName?.[0] || "") || "EX";

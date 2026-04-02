@@ -115,7 +115,7 @@ function BookingsContent() {
     setActionLoading(id);
     try {
       await acceptBookingRequest(id);
-      toast.success("Booking request accepted!");
+      toast.success("Order accepted!");
       await fetchData();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to accept");
@@ -129,7 +129,7 @@ function BookingsContent() {
     setActionLoading(rejectingId);
     try {
       await rejectBookingRequest(rejectingId, rejectReason || undefined);
-      toast.success("Booking request rejected");
+      toast.success("Order rejected");
       setRejectDialogOpen(false);
       setRejectingId(null);
       setRejectReason("");
@@ -167,7 +167,7 @@ function BookingsContent() {
     { id: "active", label: "Active", count: activeBookings.length },
     { id: "upcoming", label: "Upcoming", count: upcomingBookings.length },
     { id: "completed", label: "Completed", count: completedBookings.length },
-    { id: "requested", label: "Requested", count: pendingRequests.length },
+    { id: "requested", label: "Orders", count: pendingRequests.length },
   ];
 
   const filteredData = getFilteredData();
@@ -301,7 +301,7 @@ function BookingsContent() {
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Reject Booking Request</DialogTitle>
+            <DialogTitle>Reject Order</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <Textarea
@@ -335,8 +335,8 @@ function RequestCard({ request, actionLoading, onAccept, onReject }: {
       <CardContent className="p-5 space-y-4">
         <div className="flex justify-between items-start">
           <div className="space-y-1">
-            <h3 className="font-bold text-lg">Service: {request.service?.name || "Service Request"}</h3>
-            <p className="text-sm text-muted-foreground font-medium">Req ID: {request.id.substring(0, 8).toUpperCase()}</p>
+            <h3 className="font-bold text-lg">Service: {request.service?.name || "Service Order"}</h3>
+            <p className="text-sm text-muted-foreground font-medium">Order ID: {request.id.substring(0, 8).toUpperCase()}</p>
           </div>
           <p className="text-xs text-muted-foreground">{new Date(request.createdAt).toLocaleDateString()}</p>
         </div>

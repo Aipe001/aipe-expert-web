@@ -115,7 +115,7 @@ export default function DashboardPage() {
     setActionLoading(id);
     try {
       await acceptBookingRequest(id);
-      toast.success("Booking request accepted!");
+      toast.success("Order accepted!");
       await fetchData();
     } catch (err: unknown) {
       toast.error(
@@ -144,7 +144,7 @@ export default function DashboardPage() {
     setActionLoading(rejectingId);
     try {
       await rejectBookingRequest(rejectingId, rejectReason || undefined);
-      toast.success("Booking request rejected");
+      toast.success("Order rejected");
       setRejectDialogOpen(false);
       setRejectingId(null);
       setRejectReason("");
@@ -182,7 +182,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex-1">
                 <p className="font-semibold text-amber-900">
-                  You have {pendingRequests.length} pending booking request{pendingRequests.length > 1 ? "s" : ""}
+                  You have {pendingRequests.length} pending order{pendingRequests.length > 1 ? "s" : ""}
                 </p>
                 <p className="text-sm text-amber-700">Tap to review and respond</p>
               </div>
@@ -299,7 +299,7 @@ export default function DashboardPage() {
             href="/bookings?tab=active"
           />
           <BookingCard
-            title="Requested"
+            title="New Orders"
             count={requestedCount}
             loading={loading}
             icon={<FileText className="h-6 w-6 text-yellow-500" />}
@@ -328,14 +328,14 @@ export default function DashboardPage() {
       {/* Pending Requests Section */}
       {pendingRequests.length > 0 && (
         <motion.div variants={itemVariants} className="space-y-4">
-          <h2 className="text-xl font-bold tracking-tight">Pending Requests</h2>
+          <h2 className="text-xl font-bold tracking-tight">Pending Orders</h2>
           <div className="space-y-3">
             {pendingRequests.slice(0, 3).map((req) => (
               <Card key={req.id} className="border-none shadow-sm">
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold truncate">{req.service?.name || "Service Request"}</p>
+                      <p className="font-bold truncate">{req.service?.name || "Service Order"}</p>
                       <p className="text-sm text-muted-foreground mt-0.5">
                         Customer: {req.customer ? `${req.customer.firstName} ${req.customer.lastName}` : "Anonymous"}
                       </p>
@@ -379,7 +379,7 @@ export default function DashboardPage() {
             {pendingRequests.length > 3 && (
               <Link href="/bookings?tab=requested">
                 <Button variant="ghost" className="w-full text-[#1C8AFF]">
-                  View all {pendingRequests.length} requests <ChevronRight className="h-4 w-4 ml-1" />
+                  View all {pendingRequests.length} orders <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               </Link>
             )}
@@ -415,7 +415,7 @@ export default function DashboardPage() {
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Reject Booking Request</DialogTitle>
+            <DialogTitle>Reject Order</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <Textarea

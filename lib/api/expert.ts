@@ -86,6 +86,11 @@ export interface KycTemplate {
   kycType: "expert" | "bank_approval" | "category_service";
   description?: string;
   isActive: boolean;
+  targetCategoryId?: string;
+  targetCategory?: {
+    id: string;
+    name: string;
+  };
   steps: KycTemplateStep[];
 }
 
@@ -175,6 +180,11 @@ export const expertApi = {
   getKycTemplateByType: async (kycType: string): Promise<KycTemplate | null> => {
     const templates = await apiClient<KycTemplate[]>(`/kyc-templates?kycType=${kycType}`);
     return templates.find((t) => t.isActive) || null;
+  },
+
+  getKycTemplatesByType: async (kycType: string): Promise<KycTemplate[]> => {
+    const templates = await apiClient<KycTemplate[]>(`/kyc-templates?kycType=${kycType}`);
+    return templates.filter((t) => t.isActive);
   },
 
   getMyKycSubmissions: async (): Promise<KycSubmission[]> => {

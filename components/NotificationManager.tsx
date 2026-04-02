@@ -80,22 +80,24 @@ export function NotificationManager() {
 
                 dispatch(addNotification(data));
                 
-                // Show toast
-                toast(data.title || "New Notification", {
-                  description: data.message,
-                  icon: <Bell className="h-4 w-4 text-[#1C8AFF]" />,
-                  action: {
-                    label: "View",
-                    onClick: () => {
-                      if (data.type === "booking_request") {
-                        router.push("/bookings?tab=requested");
-                      } else if (data.type === "new_message") {
-                        const bookingId = data.metadata?.bookingId || data.bookingId;
-                        if (bookingId) router.push(`/chat/${bookingId}`);
-                      }
+                // Show toast for everything except incoming_call (which is handled by IncomingCallModal)
+                if (data.type !== "incoming_call") {
+                  toast(data.title || "New Notification", {
+                    description: data.message,
+                    icon: <Bell className="h-4 w-4 text-[#1C8AFF]" />,
+                    action: {
+                      label: "View",
+                      onClick: () => {
+                        if (data.type === "booking_request") {
+                          router.push("/bookings?tab=requested");
+                        } else if (data.type === "new_message") {
+                          const bookingId = data.metadata?.bookingId || data.bookingId;
+                          if (bookingId) router.push(`/chat/${bookingId}`);
+                        }
+                      },
                     },
-                  },
-                });
+                  });
+                }
               } catch (parseErr) {
                 console.warn("[SSE] Parse error:", parseErr, trimmedLine);
               }

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState } from "@/lib/store/store";
 import { setOnboardingStatus } from "@/lib/store/slices/authSlice";
-import { expertApi, KycTemplate, KycTemplateStep, BookAnExpertPlan, ExpertProfile } from "@/lib/api/expert";
+import { expertApi, KycTemplate, KycTemplateStep, BookAnExpertPlan, ExpertProfile, KycSubmission } from "@/lib/api/expert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,9 +55,13 @@ export default function KycPage() {
 
   const [activeTab, setActiveTab] = useState("expert-kyc");
   const [template, setTemplate] = useState<KycTemplate | null>(null);
+  const [categoryTemplates, setCategoryTemplates] = useState<KycTemplate[]>([]);
+  const [submissions, setSubmissions] = useState<KycSubmission[]>([]);
+  const [activeCategoryForm, setActiveCategoryForm] = useState<KycTemplate | null>(null);
+
   const [stepData, setStepData] = useState<Record<string, StepData>>({});
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [submittingTemplateId, setSubmittingTemplateId] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const [availablePlans, setAvailablePlans] = useState<BookAnExpertPlan[]>([]);
@@ -79,48 +83,73 @@ export default function KycPage() {
         const status = await expertApi.getOnboardingStatus();
         dispatch(setOnboardingStatus(status));
 
-        if (["SUBMITTED", "UNDER_REVIEW", "VERIFIED"].includes(status.kyc?.status || "")) {
+        if (["SUBMITTED", "UNDER_REVIEW", "VERIFIED", "APPROVED"].includes((status.kyc?.status || "").toUpperCase())) {
           // We no longer redirect to pending globally, handled inside the tabs now
         }
 
         const tmpl = await expertApi.getKycTemplateByType("expert");
-        if (tmpl) {
-          setTemplate(tmpl);
-          const initial: Record<string, StepData> = {};
-          
-          try {
-            const submissions = await expertApi.getMyKycSubmissions();
-            const lastSub = submissions.find(s => s.kycTemplateId === tmpl.id);
-            if (lastSub) {
-              const subStatus = lastSub.status.toUpperCase();
-              setLocalSubmissionStatus(subStatus);
-              if (["APPROVED", "VERIFIED"].includes(subStatus)) {
-                setActiveTab("subscription");
-              }
+        const catTmpls = await expertApi.getKycTemplatesByType("category_service");
+        
+        if (catTmpls) {
+          setCategoryTemplates(catTmpls);
+        }
+
+        try {
+            const subs = await expertApi.getMyKycSubmissions();
+            setSubmissions(subs);
+            
+            const initial: Record<string, StepData> = {};
+            
+            if (tmpl) {
+               setTemplate(tmpl);
+               const lastSub = subs.find(s => s.kycTemplateId === tmpl.id);
+               if (lastSub) {
+                 const subStatus = lastSub.status.toUpperCase();
+                 setLocalSubmissionStatus(subStatus);
+                 if (["APPROVED", "VERIFIED"].includes(subStatus)) {
+                   setActiveTab("subscription");
+                 }
+               }
+
+               if (lastSub && lastSub.documents) {
+                 tmpl.steps.forEach((step) => {
+                   const doc = lastSub.documents?.find(d => d.kycTemplateStepId === step.id);
+                   initial[step.id] = {
+                     documentFrontUrl: doc?.documentFrontUrl,
+                     documentBackUrl: doc?.documentBackUrl,
+                     documentFrontName: doc?.documentOriginalName || (doc?.documentFrontUrl ? "Previously Submitted" : undefined),
+                     documentBackName: doc?.documentBackUrl ? "Previously Submitted" : undefined,
+                     fieldValue: doc?.fieldValue,
+                   };
+                 });
+               } else {
+                 tmpl.steps.forEach((step) => { initial[step.id] = {}; });
+               }
             }
 
-            if (lastSub && lastSub.documents) {
-              tmpl.steps.forEach((step) => {
-                const doc = lastSub.documents?.find(d => d.kycTemplateStepId === step.id);
-                initial[step.id] = {
-                  documentFrontUrl: doc?.documentFrontUrl,
-                  documentBackUrl: doc?.documentBackUrl,
-                  documentFrontName: doc?.documentOriginalName || (doc?.documentFrontUrl ? "Previously Submitted" : undefined),
-                  documentBackName: doc?.documentBackUrl ? "Previously Submitted" : undefined,
-                  fieldValue: doc?.fieldValue,
-                };
-              });
-            } else {
-              tmpl.steps.forEach((step) => {
-                initial[step.id] = {};
-              });
+            if (catTmpls) {
+               catTmpls.forEach(catTmpl => {
+                  const catSub = subs.find(s => s.kycTemplateId === catTmpl.id);
+                  if (catSub && catSub.documents) {
+                    catTmpl.steps.forEach(step => {
+                      const doc = catSub.documents?.find(d => d.kycTemplateStepId === step.id);
+                      initial[step.id] = {
+                        documentFrontUrl: doc?.documentFrontUrl,
+                        documentBackUrl: doc?.documentBackUrl,
+                        documentFrontName: doc?.documentOriginalName || (doc?.documentFrontUrl ? "Previously Submitted" : undefined),
+                        documentBackName: doc?.documentBackUrl ? "Previously Submitted" : undefined,
+                        fieldValue: doc?.fieldValue,
+                      };
+                    });
+                  } else {
+                    catTmpl.steps.forEach(step => { initial[step.id] = {}; });
+                  }
+               });
             }
-          } catch (e) {
-            tmpl.steps.forEach((step) => {
-              initial[step.id] = {};
-            });
-          }
-          setStepData(initial);
+
+            setStepData(initial);
+        } catch (e) {
+            console.error("Failed to load submissions", e);
         }
 
         try {
@@ -197,9 +226,9 @@ export default function KycPage() {
     }
   };
 
-  const isValid = (): boolean => {
-    if (!template) return false;
-    return template.steps
+  const isValid = (tmpl: KycTemplate | null): boolean => {
+    if (!tmpl) return false;
+    return tmpl.steps
       .filter((s) => s.required)
       .every((step) => {
         const data = stepData[step.id];
@@ -212,12 +241,12 @@ export default function KycPage() {
       });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, submitTemplate: KycTemplate | null) => {
     e.preventDefault();
-    if (!template || !isValid()) return;
-    setSubmitting(true);
+    if (!submitTemplate || !isValid(submitTemplate)) return;
+    setSubmittingTemplateId(submitTemplate.id);
     try {
-      const submissions = await Promise.all(template.steps.map(async (step) => {
+      const payloadSubmissions = await Promise.all(submitTemplate.steps.map(async (step) => {
         const data = stepData[step.id] || {};
         
         let frontUrl = data.documentFrontUrl;
@@ -241,21 +270,28 @@ export default function KycPage() {
       }));
 
       await expertApi.submitKycSubmission({
-        kycTemplateId: template.id,
-        submissions,
+        kycTemplateId: submitTemplate.id,
+        targetId: submitTemplate.targetCategoryId,
+        submissions: payloadSubmissions,
       });
       toast.success("KYC documents submitted successfully!");
-      router.push("/kyc/pending");
+      if (submitTemplate.kycType === "expert") {
+        router.push("/kyc/pending");
+      } else {
+        setActiveCategoryForm(null);
+        const subs = await expertApi.getMyKycSubmissions();
+        setSubmissions(subs);
+      }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to submit KYC");
     } finally {
-      setSubmitting(false);
+      setSubmittingTemplateId(null);
     }
   };
 
-  const renderStep = (step: KycTemplateStep) => {
+  const renderStep = (step: KycTemplateStep, tmpl: KycTemplate | null) => {
     const data = stepData[step.id] || {};
-    const stepIndex = template ? [...template.steps].sort((a, b) => a.stepOrder - b.stepOrder).findIndex((s) => s.id === step.id) : 0;
+    const stepIndex = tmpl ? [...tmpl.steps].sort((a, b) => a.stepOrder - b.stepOrder).findIndex((s) => s.id === step.id) : 0;
 
     return (
       <div key={step.id} className="rounded-lg border p-4 space-y-3">
@@ -461,9 +497,9 @@ export default function KycPage() {
                 {kycStatus && (
                   <Badge
                     variant={
-                      kycStatus === "VERIFIED"
+                      ["VERIFIED", "APPROVED"].includes((kycStatus || "").toUpperCase())
                         ? "default"
-                        : kycStatus === "REJECTED"
+                        : ["REJECTED"].includes((kycStatus || "").toUpperCase())
                           ? "destructive"
                           : "secondary"
                     }
@@ -490,7 +526,7 @@ export default function KycPage() {
                     Your KYC documents have been submitted and are being reviewed by our team. This usually takes 24-48 hours.
                   </p>
                 </div>
-              ) : ["APPROVED", "VERIFIED"].includes(localSubmissionStatus || "") ? (
+              ) : ["APPROVED", "VERIFIED"].includes((localSubmissionStatus || "").toUpperCase()) ? (
                 <div className="py-12 flex flex-col items-center text-center">
                   <CheckCircle2 className="h-12 w-12 text-green-600 mb-4" />
                   <h3 className="text-xl font-medium text-green-700">KYC Verified!</h3>
@@ -500,17 +536,17 @@ export default function KycPage() {
                   <Button className="mt-6" onClick={() => setActiveTab("subscription")}>Next Step</Button>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={(e) => handleSubmit(e, template)} className="space-y-4">
                   {[...template.steps]
                     .sort((a, b) => a.stepOrder - b.stepOrder)
-                    .map(renderStep)}
+                    .map(step => renderStep(step, template))}
 
                   <Button
                     type="submit"
                     className="w-full bg-[#1C8AFF]"
-                    disabled={submitting || !isValid()}
+                    disabled={submittingTemplateId === template.id || !isValid(template)}
                   >
-                    {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {submittingTemplateId === template.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Submit KYC Documents
                   </Button>
                 </form>
@@ -576,10 +612,82 @@ export default function KycPage() {
               <CardDescription>Verify your specific expertise categories.</CardDescription>
             </CardHeader>
             <CardContent>
-               <div className="py-12 flex flex-col items-center text-center">
-                 <p className="text-muted-foreground">Category documents missing or optional (Placeholder)</p>
-                 <Button className="mt-4" onClick={() => setActiveTab("bank-kyc")}>Next Step</Button>
-              </div>
+               {activeCategoryForm ? (
+                 <div className="space-y-6">
+                   <div className="flex items-center justify-between">
+                     <h3 className="text-lg font-semibold">{activeCategoryForm.targetCategory?.name || activeCategoryForm.name} KYC</h3>
+                     <Button variant="ghost" onClick={() => setActiveCategoryForm(null)}>Back to Categories</Button>
+                   </div>
+                   <form onSubmit={(e) => handleSubmit(e, activeCategoryForm)} className="space-y-4">
+                     {[...activeCategoryForm.steps]
+                        .sort((a, b) => a.stepOrder - b.stepOrder)
+                        .map(step => renderStep(step, activeCategoryForm))}
+                     <Button
+                        type="submit"
+                        className="w-full bg-[#1C8AFF]"
+                        disabled={submittingTemplateId === activeCategoryForm.id || !isValid(activeCategoryForm)}
+                     >
+                       {submittingTemplateId === activeCategoryForm.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                       Submit {activeCategoryForm.targetCategory?.name} KYC
+                     </Button>
+                   </form>
+                 </div>
+               ) : categoryTemplates.length === 0 ? (
+                 <div className="py-12 flex flex-col items-center text-center">
+                   <p className="text-muted-foreground">No category KYC requirements available.</p>
+                   <Button className="mt-4" onClick={() => setActiveTab("bank-kyc")}>Next Step</Button>
+                 </div>
+               ) : (
+                 <div className="space-y-6">
+                   <div className="grid gap-4 sm:grid-cols-2">
+                     {categoryTemplates.map(catTmpl => {
+                       const catSub = submissions.find(s => s.kycTemplateId === catTmpl.id);
+                       const status = catSub ? catSub.status.toUpperCase() : "NOT_SUBMITTED";
+                       
+                       return (
+                         <div key={catTmpl.id} className="rounded-xl border p-5 relative transition-colors hover:border-primary/50">
+                           <div className="flex justify-between items-start mb-2 gap-4">
+                             <h4 className="font-semibold">{catTmpl.targetCategory?.name || catTmpl.name}</h4>
+                             <Badge
+                                variant={
+                                  ["VERIFIED", "APPROVED"].includes(status) ? "default" :
+                                  ["REJECTED"].includes(status) ? "destructive" :
+                                  status !== "NOT_SUBMITTED" ? "secondary" : "outline"
+                                }
+                             >
+                               {status.replace("_", " ")}
+                             </Badge>
+                           </div>
+                           <p className="text-sm text-muted-foreground mb-4">
+                             {catTmpl.description || "Submit KYC documents to provide services in this category."}
+                           </p>
+                           {status === "REJECTED" && catSub?.rejectionReason && (
+                             <p className="text-xs text-destructive mb-4">Reason: {catSub.rejectionReason}</p>
+                           )}
+                           <div className="flex justify-end pt-2">
+                             {["VERIFIED", "APPROVED", "SUBMITTED", "UNDER_REVIEW"].includes(status) ? (
+                               <Button variant="outline" size="sm" disabled>
+                                 {["SUBMITTED", "UNDER_REVIEW"].includes(status) ? "Pending Review" : "Completed"}
+                               </Button>
+                             ) : (
+                               <Button 
+                                 size="sm" 
+                                 className="bg-[#1C8AFF] hover:bg-[#1C8AFF]/90"
+                                 onClick={() => setActiveCategoryForm(catTmpl)}
+                               >
+                                 {status === "REJECTED" ? "Resubmit KYC" : "Submit KYC"}
+                               </Button>
+                             )}
+                           </div>
+                         </div>
+                       );
+                     })}
+                   </div>
+                   <div className="flex justify-end pt-4 border-t">
+                     <Button onClick={() => setActiveTab("bank-kyc")}>Next Step</Button>
+                   </div>
+                 </div>
+               )}
             </CardContent>
           </TabsContent>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState } from "@/lib/store/store";
@@ -14,11 +14,7 @@ import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function DashboardContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -39,15 +35,31 @@ export default function DashboardLayout({
   }, [user, isAuthenticated, onboardingStatus, router, pathname]);
 
   return (
+    <div className="flex-1 overflow-x-hidden">
+      <div className={cn("max-w-full", isChatDetail ? "p-0" : "p-4 md:p-6")}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
     <SidebarProvider>
       <ExpertSidebar />
       <SidebarInset>
         <Header />
-        <div className="flex-1 overflow-x-hidden">
-          <div className={cn("max-w-full", isChatDetail ? "p-0" : "p-4 md:p-6")}>
-            {children}
+        <Suspense fallback={
+          <div className="flex-1 flex items-center justify-center min-h-[400px]">
+             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-        </div>
+        }>
+          <DashboardContent>{children}</DashboardContent>
+        </Suspense>
       </SidebarInset>
     </SidebarProvider>
   );

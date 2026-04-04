@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
 import { RootState } from "@/lib/store/store";
@@ -13,13 +13,7 @@ import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChatContainer } from "@/components/chat/ChatContainer";
 
-/**
- * Unified Chat Page.
- * Handles both the chat list and the chat detail view using query parameters.
- * This approach is 100% compatible with static export ('output: export')
- * and avoids the need for generateStaticParams.
- */
-export default function ChatPage() {
+function ChatContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const bookingId = searchParams.get("id");
@@ -40,13 +34,11 @@ export default function ChatPage() {
     const fetchChats = async () => {
       try {
         const allBookings = await getExpertBookings();
-        // Show active/confirmed bookings as chat channels
         const chatBookings = allBookings.filter(
           (b) => ["active", "confirmed", "upcoming", "completed"].includes(b.status)
         );
         setBookings(chatBookings);
 
-        // Fetch last messages for each booking
         const msgPromises = chatBookings.map(async (b) => {
           try {
             const msgs = await agoraApi.getMessages(b.id);
@@ -74,7 +66,6 @@ export default function ChatPage() {
     fetchChats();
   }, [isAuthenticated, router]);
 
-  // If a booking ID is present in the URL, show the Chat Detail view
   if (bookingId) {
     return (
       <div className="h-[calc(100vh-64px)] flex flex-col">
@@ -100,10 +91,7 @@ export default function ChatPage() {
 
   const containerVariants = {
     hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1 },
-    },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
   };
 
   const itemVariants = {
@@ -147,9 +135,7 @@ export default function ChatPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20 pt-8 px-4 lg:px-0">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">
-          Customer Chat
-        </h1>
+        <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Customer Chat</h1>
       </div>
 
       {bookings.length === 0 ? (
@@ -178,7 +164,6 @@ export default function ChatPage() {
                     index !== bookings.length - 1 && "border-b border-slate-100"
                   )}
                 >
-                  {/* Avatar */}
                   <div className="relative shrink-0">
                     <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg">
                       {getInitials(booking)}
@@ -188,8 +173,6 @@ export default function ChatPage() {
                       booking.status === "active" ? "bg-green-500" : "bg-slate-300"
                     )} />
                   </div>
-
-                  {/* Chat Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <h3 className="font-bold text-slate-900 truncate group-hover:text-[#1C8AFF] transition-colors">
@@ -205,8 +188,6 @@ export default function ChatPage() {
                       {lastMsg?.content || `${booking.service?.name || "Consultation"} · #${booking.bookingNumber}`}
                     </p>
                   </div>
-
-                  {/* Action */}
                   <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-slate-400 group-hover:translate-x-0.5 transition-all" />
                 </Link>
               </motion.div>
@@ -215,5 +196,17 @@ export default function ChatPage() {
         </motion.div>
       )}
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <ChatContent />
+    </Suspense>
   );
 }

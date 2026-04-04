@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
-  output: 'export',
+  // output: 'export',
   images: { unoptimized: true },
 
   webpack(config) {
@@ -13,6 +14,8 @@ const nextConfig: NextConfig = {
   },
 
   turbopack: {
+    // Set the root to the current directory to silence multiple lockfile warnings
+    root: path.join(__dirname),
     rules: {
       '*.svg': {
         loaders: ['@svgr/webpack'],

@@ -1,19 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
 import { RootState } from "@/lib/store/store";
 import { getExpertBookings, Booking } from "@/lib/api/bookings";
 import { agoraApi, ChatMessage } from "@/lib/api/agora";
 import { motion } from "framer-motion";
-import { User, ChevronRight, Loader2, MessageSquare } from "lucide-react";
+import { User, ChevronRight, Loader2, MessageSquare, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ChatContainer } from "@/components/chat/ChatContainer";
 
+/**
+ * Unified Chat Page.
+ * Handles both the chat list and the chat detail view using query parameters.
+ * This approach is 100% compatible with static export ('output: export')
+ * and avoids the need for generateStaticParams.
+ */
 export default function ChatPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const bookingId = searchParams.get("id");
+  const joined = searchParams.get("joined") === "1";
+  const callType = searchParams.get("callType") as "audio" | "video" | null;
+
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [lastMessages, setLastMessages] = useState<Record<string, ChatMessage | null>>({});
@@ -61,6 +73,30 @@ export default function ChatPage() {
 
     fetchChats();
   }, [isAuthenticated, router]);
+
+  // If a booking ID is present in the URL, show the Chat Detail view
+  if (bookingId) {
+    return (
+      <div className="h-[calc(100vh-64px)] flex flex-col">
+          <div className="p-4 border-b bg-white flex items-center gap-4">
+            <button 
+              onClick={() => router.push('/chat')}
+              className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5 text-slate-600" />
+            </button>
+            <h2 className="font-bold text-slate-800">Conversation</h2>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <ChatContainer
+              bookingId={bookingId}
+              joined={joined}
+              incomingCallType={callType}
+            />
+          </div>
+      </div>
+    );
+  }
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -136,7 +172,7 @@ export default function ChatPage() {
             return (
               <motion.div key={booking.id} variants={itemVariants}>
                 <Link
-                  href={`/chat/${booking.id}`}
+                  href={`/chat?id=${booking.id}`}
                   className={cn(
                     "flex items-center gap-4 p-5 hover:bg-slate-50 transition-colors group",
                     index !== bookings.length - 1 && "border-b border-slate-100"

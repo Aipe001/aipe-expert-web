@@ -445,7 +445,7 @@ function TicketCard({ booking, type, statusSteps, onUpdateStatus }: {
                   </p>
                 </div>
               </div>
-              <Link href={`/chat/${booking.id}`}>
+              <Link href={`/chat?id=${booking.id}`}>
                 <Button className="bg-[#1C8AFF] hover:bg-[#1C8AFF]/90 rounded-xl px-6 py-6 text-base font-bold flex gap-2">
                   Service time {new Date(booking.scheduledAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} | Join call <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -470,12 +470,12 @@ function TicketCard({ booking, type, statusSteps, onUpdateStatus }: {
           <div className="border-t pt-4 flex justify-between items-center mt-4">
             <p className="text-sm font-semibold">Customer: <span className="font-normal">{customerName}</span></p>
             <div className="flex gap-3">
-              <Link href={`/chat/${booking.id}`}>
+              <Link href={`/chat?id=${booking.id}`}>
                 <button className="p-2 rounded-full bg-green-50 text-green-600 hover:bg-green-100 transition-colors">
                   <MessageCircle className="h-5 w-5" />
                 </button>
               </Link>
-              <Link href={`/chat/${booking.id}`}>
+              <Link href={`/chat?id=${booking.id}`}>
                 <button className="p-2 rounded-full bg-blue-50 text-[#1C8AFF] hover:bg-blue-100 transition-colors">
                   <Phone className="h-5 w-5" />
                 </button>

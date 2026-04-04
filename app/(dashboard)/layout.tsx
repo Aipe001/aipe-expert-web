@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState } from "@/lib/store/store";
 import { setOnboardingStatus } from "@/lib/store/slices/authSlice";
@@ -10,7 +10,6 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ExpertSidebar } from "@/components/layout/ExpertSidebar";
 import { Header } from "@/components/layout/Header";
 import { IncomingCallModal } from "@/components/chat/IncomingCallModal";
-import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,7 +21,8 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const isChatDetail = pathname?.startsWith("/chat/");
+  const searchParams = useSearchParams();
+  const isChatDetail = pathname === "/chat" && searchParams.get("id");
   const { user, isAuthenticated, onboardingStatus } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {

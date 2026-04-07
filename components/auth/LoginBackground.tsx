@@ -1,5 +1,8 @@
 "use client";
 
+import Image from "next/image";
+
+/*
 import { motion } from "framer-motion";
 import {
   Landmark,
@@ -75,13 +78,11 @@ const IconRow = ({
   );
 };
 
-export const LoginBackground = () => {
+export const LoginBackgroundOld = () => {
   return (
     <div className="absolute inset-0 z-0 overflow-hidden bg-[#F8FAFC] pointer-events-none">
-      {/* Subtle brand tint */}
       <div className="absolute inset-0 bg-linear-to-br from-[#1C8AFF]/5 via-transparent to-transparent" />
 
-      {/* Rotated Container for Diagonal Motion */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-35 scale-150">
         <div className="flex flex-col gap-6">
           <IconRow direction={-1} speed={60} />
@@ -97,9 +98,25 @@ export const LoginBackground = () => {
         </div>
       </div>
 
-      {/* Finishing gradient to fade edges */}
       <div className="absolute inset-0 bg-linear-to-r from-[#F8FAFC] via-transparent to-[#F8FAFC] opacity-40" />
       <div className="absolute inset-0 bg-linear-to-b from-[#F8FAFC] via-transparent to-[#F8FAFC] opacity-40" />
+    </div>
+  );
+};
+*/
+
+export const LoginBackground = () => {
+  return (
+    <div className="absolute inset-0 z-0 w-full h-full overflow-hidden">
+      <Image
+        src="/man-is-working-computer-with-graph-screen.jpg"
+        alt="Login Background"
+        fill
+        priority
+        className="object-cover scale-110 blur-[10px]"
+      />
+      {/* Dark overlay for better text readability */}
+      <div className="absolute inset-0 bg-black/30" />
     </div>
   );
 };

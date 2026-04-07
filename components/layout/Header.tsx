@@ -33,7 +33,7 @@ const pageTitles: Record<string, string> = {
 export function Header() {
   const dispatch = useDispatch();
   const pathname = usePathname();
-  const { } = useSidebar();
+  const {} = useSidebar();
   const { user } = useSelector((state: RootState) => state.auth);
 
   const initials =
@@ -55,7 +55,10 @@ export function Header() {
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
       <div className="flex items-center gap-2">
         <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="hidden md:block mr-2 h-4" />
+        <Separator
+          orientation="vertical"
+          className="hidden md:block mr-2 h-4"
+        />
         <h2 className="hidden md:block text-sm font-semibold truncate md:text-base">
           {pageTitle}
         </h2>
@@ -75,7 +78,7 @@ export function Header() {
           />
         </div> */}
         <span className="text-lg font-bold tracking-tight whitespace-nowrap">
-          <span className="text-[#1C8AFF] italic">Expert Console</span>
+          <span className="text-[#1C8AFF] italic">Expert Dashboard</span>
         </span>
       </Link>
 
@@ -114,7 +117,10 @@ export function Header() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href="/profile" className="cursor-pointer flex items-center w-full">
+              <Link
+                href="/profile"
+                className="cursor-pointer flex items-center w-full"
+              >
                 <User className="mr-2 h-4 w-4" />
                 Profile
               </Link>

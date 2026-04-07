@@ -18,8 +18,35 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { OTPInput, SlotProps } from "input-otp";
+import { cn } from "@/lib/utils";
 
 import { LoginBackground } from "@/components/auth/LoginBackground";
+
+const Slot = (props: SlotProps) => {
+  return (
+    <div
+      className={cn(
+        "relative w-11 h-14 flex items-center justify-center text-xl font-bold text-white transition-all duration-300",
+        "bg-white/10 border border-white/20 rounded-xl",
+        "group-focus-within:border-[#1C8AFF]/50 group-hover:border-white/30",
+        props.isActive && "z-10 ring-2 ring-[#1C8AFF] border-[#1C8AFF] bg-white/15",
+      )}
+    >
+      {props.char !== null && <div>{props.char}</div>}
+      {props.hasFakeCaret && <FakeCaret />}
+    </div>
+  );
+};
+
+const FakeCaret = () => {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+      <div className="w-px h-6 bg-white/50 animate-caret-blink" />
+    </div>
+  );
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -56,6 +83,9 @@ export default function LoginPage() {
       await authApi.sendOtp(identifier);
       dispatch(setTempIdentifier(identifier));
       dispatch(otpSentSuccess());
+      toast.success("OTP Sent", {
+        description: `A 6-digit code has been sent to +91 ${identifier}`,
+      });
     } catch (err: unknown) {
       dispatch(
         loginFailure(err instanceof Error ? err.message : "Failed to send OTP"),
@@ -85,6 +115,9 @@ export default function LoginPage() {
           token: response.accessToken,
         }),
       );
+      toast.success("Login Successful", {
+        description: `Welcome back, ${response.user.firstName}!`,
+      });
       router.push("/dashboard");
     } catch (err: unknown) {
       dispatch(
@@ -304,16 +337,23 @@ export default function LoginPage() {
                   >
                     Verification Code
                   </Label>
-                  <Input
-                    id="otp"
-                    type="text"
-                    placeholder="Enter 6-digit OTP"
-                    className="h-14 bg-white/10 border-white/20 text-white placeholder:text-white/30 text-center tracking-[0.4em] text-2xl font-black rounded-2xl focus:ring-2 focus:ring-[#1C8AFF] focus:border-transparent transition-all"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    maxLength={6}
-                    required
-                  />
+                  <div className="flex justify-center">
+                    <OTPInput
+                      id="otp"
+                      maxLength={6}
+                      value={otp}
+                      onChange={setOtp}
+                      autoFocus
+                      containerClassName="group flex items-center has-[:disabled]:opacity-50"
+                      render={({ slots }) => (
+                        <div className="flex gap-2">
+                          {slots.map((slot, idx) => (
+                            <Slot key={idx} {...slot} />
+                          ))}
+                        </div>
+                      )}
+                    />
+                  </div>
                 </div>
                 {error && (
                   <div className="bg-red-500/20 backdrop-blur-md text-red-100 text-sm p-4 rounded-2xl flex items-center gap-3 border border-red-500/30 animate-in fade-in slide-in-from-top-1">

@@ -54,6 +54,7 @@
     "react": "19.2.3",
     "react-day-picker": "8.10.1",
     "react-dom": "19.2.3",
+    "react-fast-marquee": "^1.6.5",
     "react-hook-form": "^7.71.1",
     "react-redux": "^9.2.0",
     "react-resizable-panels": "^4.6.2",

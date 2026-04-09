@@ -335,7 +335,11 @@ export default function DashboardPage() {
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold truncate">{req.service?.name || "Service Order"}</p>
+                      <p className="font-bold truncate">
+                        {req.productType === "book_an_expert"
+                          ? `Subscription: ${req.bookAnExpert?.name || "Expert Session"}`
+                          : `Service: ${req.service?.name || "Service Order"}`}
+                      </p>
                       <p className="text-sm text-muted-foreground mt-0.5">
                         Customer: {req.customer ? `${req.customer.firstName} ${req.customer.lastName}` : "Anonymous"}
                       </p>

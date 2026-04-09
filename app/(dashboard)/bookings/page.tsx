@@ -5,12 +5,10 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useSelector } from "react-redux";
 import { RootState } from "@/lib/store/store";
 import {
-  getExpertBookingRequests,
   getExpertBookings,
   acceptBookingRequest,
   rejectBookingRequest,
   updateBookingStatus,
-  BookingRequest,
   Booking,
 } from "@/lib/api/bookings";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,6 +32,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -57,7 +56,6 @@ function BookingsContent() {
   const activeTab = searchParams.get("tab") || "active";
 
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
@@ -68,12 +66,8 @@ function BookingsContent() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [bookRes, reqRes] = await Promise.allSettled([
-        getExpertBookings(),
-        getExpertBookingRequests(),
-      ]);
-      if (bookRes.status === "fulfilled") setBookings(bookRes.value);
-      if (reqRes.status === "fulfilled") setRequests(reqRes.value);
+      const bookRes = await getExpertBookings();
+      setBookings(bookRes);
     } catch (err) {
       console.error("Failed to fetch bookings", err);
     } finally {
@@ -96,12 +90,12 @@ function BookingsContent() {
   };
 
   // Categorize bookings
-  const activeBookings = bookings.filter((b) => b.status === "active");
-  const upcomingBookings = bookings.filter((b) => b.status === "confirmed" || b.status === "upcoming");
+  const activeBookings = bookings.filter((b) => b.expertId && b.status === "active");
+  const upcomingBookings = bookings.filter((b) => b.expertId && (b.status === "confirmed" || b.status === "upcoming"));
   const completedBookings = bookings.filter((b) => b.status === "completed");
-  const pendingRequests = requests.filter((r) => r.status.toLowerCase() === "pending");
+  const pendingRequests = bookings.filter((b) => !b.expertId);
 
-  const getFilteredData = (): (Booking | BookingRequest)[] => {
+  const getFilteredData = (): Booking[] => {
     switch (activeTab) {
       case "active": return activeBookings;
       case "upcoming": return upcomingBookings;
@@ -167,7 +161,7 @@ function BookingsContent() {
     { id: "active", label: "Active", count: activeBookings.length },
     { id: "upcoming", label: "Upcoming", count: upcomingBookings.length },
     { id: "completed", label: "Completed", count: completedBookings.length },
-    { id: "requested", label: "Orders", count: pendingRequests.length },
+    { id: "requested", label: "Incoming Orders", count: pendingRequests.length },
   ];
 
   const filteredData = getFilteredData();
@@ -238,30 +232,21 @@ function BookingsContent() {
               className="space-y-4"
             >
               {filteredData.map((item) => {
-                if (activeTab === "requested") {
-                  const req = item as BookingRequest;
-                  return (
-                    <RequestCard
-                      key={req.id}
-                      request={req}
-                      actionLoading={actionLoading}
-                      onAccept={handleAccept}
-                      onReject={(id) => {
-                        setRejectingId(id);
-                        setRejectDialogOpen(true);
-                      }}
-                    />
-                  );
-                }
                 return (
                   <TicketCard
                     key={item.id}
-                    booking={item as Booking}
+                    booking={item}
                     type={activeTab}
-                    statusSteps={getStatusSteps((item as Booking).status)}
+                    actionLoading={actionLoading}
+                    statusSteps={getStatusSteps(item.status)}
                     onUpdateStatus={() => {
                       setStatusBookingId(item.id);
                       setIsStatusOpen(true);
+                    }}
+                    onAccept={() => handleAccept(item.bookingRequestId!)}
+                    onReject={() => {
+                      setRejectingId(item.bookingRequestId!);
+                      setRejectDialogOpen(true);
                     }}
                   />
                 );
@@ -324,59 +309,14 @@ function BookingsContent() {
   );
 }
 
-function RequestCard({ request, actionLoading, onAccept, onReject }: {
-  request: BookingRequest;
-  actionLoading: string | null;
-  onAccept: (id: string) => void;
-  onReject: (id: string) => void;
-}) {
-  return (
-    <Card className="border-none shadow-md overflow-hidden bg-white">
-      <CardContent className="p-5 space-y-4">
-        <div className="flex justify-between items-start">
-          <div className="space-y-1">
-            <h3 className="font-bold text-lg">Service: {request.service?.name || "Service Order"}</h3>
-            <p className="text-sm text-muted-foreground font-medium">Order ID: {request.id.substring(0, 8).toUpperCase()}</p>
-          </div>
-          <p className="text-xs text-muted-foreground">{new Date(request.createdAt).toLocaleDateString()}</p>
-        </div>
-        {request.customerNotes && (
-          <p className="text-sm text-muted-foreground italic">&quot;{request.customerNotes}&quot;</p>
-        )}
-        <div className="border-t pt-4 flex justify-between items-center">
-          <p className="text-sm font-semibold">
-            Customer: <span className="font-normal">
-              {request.customer ? `${request.customer.firstName} ${request.customer.lastName}` : "Anonymous"}
-            </span>
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="border-destructive text-destructive hover:bg-destructive/10 rounded-xl"
-              disabled={actionLoading === request.id}
-              onClick={() => onReject(request.id)}
-            >
-              Reject
-            </Button>
-            <Button
-              className="bg-[#1C8AFF] hover:bg-[#1C8AFF]/90 rounded-xl"
-              disabled={actionLoading === request.id}
-              onClick={() => onAccept(request.id)}
-            >
-              {actionLoading === request.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept"}
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function TicketCard({ booking, type, statusSteps, onUpdateStatus }: {
+function TicketCard({ booking, type, statusSteps, actionLoading, onUpdateStatus, onAccept, onReject }: {
   booking: Booking;
   type: string;
   statusSteps: { label: string; completed: boolean }[];
+  actionLoading?: string | null;
   onUpdateStatus: () => void;
+  onAccept?: () => void;
+  onReject?: () => void;
 }) {
   const customerName = booking.user
     ? `${booking.user.firstName} ${booking.user.lastName}`
@@ -389,7 +329,7 @@ function TicketCard({ booking, type, statusSteps, onUpdateStatus }: {
           {/* Top Line */}
           <div className="flex justify-between items-start">
             <div className="space-y-1">
-              <h3 className="font-bold text-lg">Service: {booking.service?.name || "Service"}</h3>
+              <h3 className="font-bold text-lg">Service: {booking.service?.name || booking.bookAnExpert?.name || "Service"}</h3>
               <p className="text-sm text-muted-foreground font-medium">Order ID: {booking.bookingNumber}</p>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -463,6 +403,27 @@ function TicketCard({ booking, type, statusSteps, onUpdateStatus }: {
               <div className="text-sm text-green-700 font-medium">
                 {booking.completedAt ? `On ${new Date(booking.completedAt).toLocaleDateString()}` : ""}
               </div>
+            </div>
+          )}
+
+          {/* Requested / Pending Acceptance */}
+          {type === "requested" && (
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1 border-destructive text-destructive hover:bg-destructive/10 rounded-xl py-6 font-bold"
+                disabled={actionLoading === booking.bookingRequestId}
+                onClick={onReject}
+              >
+                Reject Order
+              </Button>
+              <Button
+                className="flex-1 bg-[#1C8AFF] hover:bg-[#1C8AFF]/90 rounded-xl py-6 font-bold"
+                disabled={actionLoading === booking.bookingRequestId}
+                onClick={onAccept}
+              >
+                {actionLoading === booking.bookingRequestId ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept Order"}
+              </Button>
             </div>
           )}
 

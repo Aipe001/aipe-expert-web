@@ -8,9 +8,11 @@ export enum ServiceType {
 export interface BookingRequest {
   id: string;
   customerId: string;
-  serviceId: string;
-  expertId: string;
+  serviceId?: string;
+  bookAnExpertId?: string;
+  expertId?: string;
   serviceType: ServiceType;
+  productType: string;
   status: string;
   customerNotes?: string;
   createdAt: string;
@@ -18,6 +20,10 @@ export interface BookingRequest {
     id: string;
     name: string;
     category?: { name: string };
+  };
+  bookAnExpert?: {
+    id: string;
+    name: string;
   };
   customer?: {
     id: string;
@@ -31,7 +37,7 @@ export interface Booking {
   id: string;
   bookingNumber: string;
   userId: string;
-  expertId: string;
+  expertId?: string;
   serviceId: string;
   bookingRequestId?: string;
   scheduledAt: string;
@@ -47,9 +53,11 @@ export interface Booking {
   completedAt?: string;
   startedAt?: string;
   createdAt: string;
-  updatedAt: string;
+  productType?: string;
+  bookAnExpertId?: string;
   expert?: { id: string; firstName: string; lastName: string };
   service?: { id: string; name: string };
+  bookAnExpert?: { id: string; name: string };
   user?: { id: string; firstName: string; lastName: string; phone: string };
 }
 

@@ -98,7 +98,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages]);
 
   // Handle Call Timer

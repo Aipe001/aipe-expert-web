@@ -62,32 +62,34 @@ export function NotificationManager() {
 
         const unsubscribe = onMessage(messaging, (payload) => {
           console.log("[NotificationManager] Received FCM message:", payload);
-          
+
           const metadata = payload.data || {};
           const type = metadata.type || "general";
-          
+
           const data = {
             ...metadata,
             type,
-            title: payload.notification?.title || metadata.title,
-            message: payload.notification?.body || metadata.body || metadata.message,
+            title: payload.notification?.title || (metadata as any).title,
+            message: payload.notification?.body || (metadata as any).body || (metadata as any).message,
             data: metadata
           };
 
-          const actorId = data.actorId || data.senderId || metadata.actorId || metadata.senderId || metadata.callerUserId || metadata.callerId;
+          // Use metadata directly for dynamic property searching to avoid TS errors
+          const m = metadata as any;
+          const actorId = m.actorId || m.senderId || m.callerUserId || m.callerId;
 
           if (actorId && user?.id && String(actorId) === String(user?.id)) {
-            const bookingId = metadata.bookingId || metadata.booking?.id || data.bookingId;
-            if (data.type === "incoming_call" && metadata.action === "accepted" && currentCallRef.current && String(currentCallRef.current.bookingId) === String(bookingId)) {
+            const bookingId = m.bookingId || (m.booking && m.booking.id) || m.booking_id;
+            if (data.type === "incoming_call" && m.action === "accepted" && currentCallRef.current && String(currentCallRef.current.bookingId) === String(bookingId)) {
               dispatch(setCallStatus("active"));
             }
             return;
           }
 
           if (data.type === "incoming_call") {
-            const action = metadata.action;
-            const bookingId = metadata.bookingId || metadata.booking?.id || data.bookingId || "";
-            const callerUserId = metadata.callerUserId || metadata.callerId || data.senderId || data.actorId;
+            const action = m.action;
+            const bookingId = m.bookingId || (m.booking && m.booking.id) || m.booking_id || "";
+            const callerUserId = m.callerUserId || m.callerId || m.senderId || m.actorId;
 
             if (callerUserId && user?.id && String(callerUserId) === String(user?.id)) {
               if (action === "accepted" && currentCallRef.current && String(currentCallRef.current.bookingId) === String(bookingId)) {
@@ -115,15 +117,23 @@ export function NotificationManager() {
               if (!isSameBooking || isIdle) {
                 dispatch(setIncomingCall({
                   bookingId: String(bookingId),
-                  sessionId: metadata.sessionId || "",
-                  callerName: metadata.callerName || "Customer",
-                  callType: (metadata.callType as any) || "audio",
+                  sessionId: m.sessionId || "",
+                  callerName: m.callerName || "Customer",
+                  callType: (m.callType as any) || "audio",
                 }));
               }
             }
           }
 
-          dispatch(addNotification(data));
+          dispatch(addNotification({
+            id: m.notificationId || Math.random().toString(36).substr(2, 9),
+            type: data.type as any,
+            title: data.title || "New Notification",
+            message: data.message || "",
+            data: metadata,
+            isRead: false,
+            createdAt: new Date().toISOString()
+          } as any));
 
           if (data.type !== "incoming_call") {
             toast(data.title || "New Notification", {
@@ -135,7 +145,7 @@ export function NotificationManager() {
                   if (data.type === "booking_request") {
                     router.push("/bookings?tab=requested");
                   } else if (data.type === "new_message") {
-                    const bookingId = data.metadata?.bookingId || data.bookingId;
+                    const bookingId = m.metadata?.bookingId || m.bookingId;
                     if (bookingId) router.push(`/chat/${bookingId}`);
                   }
                 },

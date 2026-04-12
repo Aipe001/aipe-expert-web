@@ -15,6 +15,8 @@ export interface BookingRequest {
   productType: string;
   status: string;
   customerNotes?: string;
+  durationMinutes: number;
+  scheduledStartTime?: string;
   createdAt: string;
   service?: {
     id: string;
@@ -98,4 +100,9 @@ export const updateBookingStatus = async (
 export const getBookingById = async (id: string): Promise<Booking> => {
   return apiClient<Booking>(`/bookings/${id}`);
 };
+
+export const getBookingRequestById = async (id: string): Promise<BookingRequest> => {
+  return apiClient<BookingRequest>(`/bookings/requests/${id}`);
+};
+
 

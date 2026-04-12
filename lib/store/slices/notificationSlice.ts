@@ -15,14 +15,17 @@ interface NotificationState {
   notifications: Notification[];
   unreadCount: number;
   newNotification: Notification | null;
+  incomingBookingRequest: Record<string, any> | null;
   connected: boolean;
   loading: boolean;
 }
+
 
 const initialState: NotificationState = {
   notifications: [],
   unreadCount: 0,
   newNotification: null,
+  incomingBookingRequest: null,
   connected: false,
   loading: false,
 };
@@ -63,6 +66,12 @@ const notificationSlice = createSlice({
         state.unreadCount = Math.max(0, state.unreadCount - 1);
       }
     },
+    setIncomingBookingRequest: (state, action: PayloadAction<Record<string, any> | null>) => {
+      state.incomingBookingRequest = action.payload;
+    },
+    clearIncomingBookingRequest: (state) => {
+      state.incomingBookingRequest = null;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -81,6 +90,8 @@ export const {
   addNotification,
   dismissNewNotification,
   markAsRead,
+  setIncomingBookingRequest,
+  clearIncomingBookingRequest,
 } = notificationSlice.actions;
 
 export default notificationSlice.reducer;

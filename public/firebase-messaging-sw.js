@@ -1,13 +1,12 @@
-﻿importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
 const firebaseConfig = {
-  apiKey: "REPLACE_WITH_YOUR_KEY",
-  authDomain: "REPLACE_WITH_YOUR_DOMAIN",
-  projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
-  storageBucket: "REPLACE_WITH_YOUR_BUCKET",
-  messagingSenderId: "REPLACE_WITH_YOUR_SENDER_ID",
-  appId: "REPLACE_WITH_YOUR_APP_ID"
+  apiKey: "AIzaSyA38sb_Qi2BBthqL23APfY7Afc6JimNZ6c",
+  authDomain: "aipe-edfeb.firebaseapp.com",
+  projectId: "aipe-edfeb",
+  messagingSenderId: "1032054778017",
+  appId: "1:1032054778017:web:eae3e1de00ea2713faa8e0"
 };
 
 try {
@@ -15,6 +14,16 @@ try {
   const messaging = firebase.messaging();
   messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
+
+    // Broadcast background messages to all open tabs so they can update their UI
+    self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({
+          type: 'firebase-messaging-sw-message',
+          payload: payload
+        });
+      });
+    });
   });
 } catch (error) {
   console.log('[sw] Firebase init failed', error);

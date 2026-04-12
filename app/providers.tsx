@@ -12,6 +12,7 @@ import { NotificationManager } from "@/components/NotificationManager";
 import { CallManager } from "@/components/chat/CallManager";
 import { GlobalCallOverlay } from "@/components/chat/GlobalCallOverlay";
 import { IncomingCallModal } from "@/components/chat/IncomingCallModal";
+import { BookingRequestModal } from "@/components/chat/BookingRequestModal";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
@@ -25,6 +26,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <CallManager />
           <GlobalCallOverlay />
           <IncomingCallModal />
+          <BookingRequestModal />
           {children}
           <Toaster />
           <Sonner position="top-center" expand={true} richColors />

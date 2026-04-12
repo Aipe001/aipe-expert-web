@@ -420,7 +420,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
 
   if (loading) {
     return (
-      <div className="flex flex-col h-dvh lg:h-[calc(100vh-2px)] bg-[#F4F7F9] overflow-hidden">
+      <div className="flex flex-col h-full bg-[#F4F7F9] overflow-hidden">
         <header className="bg-[#1C8AFF] text-white px-4 py-3 flex items-center gap-3 shrink-0 pt-6 md:pt-4">
           <Skeleton className="h-10 w-10 rounded-full bg-white/20" />
           <Skeleton className="h-10 w-10 rounded-full bg-white/20" />
@@ -437,7 +437,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   }
 
   return (
-    <div className="flex flex-col h-dvh lg:h-[calc(100vh-2px)] bg-[#F4F7F9] overflow-hidden">
+    <div className="flex flex-col h-full bg-[#F4F7F9] overflow-hidden">
       {/* Header */}
       <header className="bg-[#1C8AFF] text-white px-4 py-3 flex items-center gap-3 shrink-0 pt-6 md:pt-4">
         <Button

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/lib/store/store";
-import { addNotification, setConnected, fetchUnreadCount, dismissNewNotification } from "@/lib/store/slices/notificationSlice";
+import { addNotification, setConnected, fetchUnreadCount, dismissNewNotification, setIncomingBookingRequest } from "@/lib/store/slices/notificationSlice";
 import { setIncomingCall, clearIncomingCall, setCallStatus, resetCall } from "@/lib/store/slices/callSlice";
 import { toast } from "sonner";
 import { Bell } from "lucide-react";
@@ -60,11 +60,12 @@ export function NotificationManager() {
 
         dispatch(fetchUnreadCount());
 
-        const unsubscribe = onMessage(messaging, (payload) => {
-          console.log("[NotificationManager] Received FCM message:", payload);
-          
+        const handleMessage = (payload: any) => {
           const metadata = payload.data || {};
-          const type = metadata.type || "general";
+          let type = metadata.type || "general";
+          if (type === "general" && payload.notification?.title?.includes("Incoming")) {
+             type = "incoming_call";
+          }
           
           const data = {
             ...metadata,
@@ -125,26 +126,53 @@ export function NotificationManager() {
 
           dispatch(addNotification(data));
 
-          if (data.type !== "incoming_call") {
+          if (data.type !== "incoming_call" && data.type !== "booking_request") {
             toast(data.title || "New Notification", {
               description: data.message,
               icon: <Bell className="h-4 w-4 text-[#1C8AFF]" />,
               action: {
                 label: "View",
                 onClick: () => {
-                  if (data.type === "booking_request") {
-                    router.push("/bookings?tab=requested");
-                  } else if (data.type === "new_message") {
+                  if (data.type === "new_message") {
                     const bookingId = data.metadata?.bookingId || data.bookingId;
                     if (bookingId) router.push(`/chat/${bookingId}`);
                   }
                 },
               },
             });
+          } else if (data.type === "booking_request") {
+            dispatch(setIncomingBookingRequest({
+              bookingRequestId: metadata.bookingRequestId || data.bookingRequestId || data.id,
+              serviceName: metadata.serviceName || data.serviceName || "Service Request",
+              durationMinutes: metadata.durationMinutes || data.durationMinutes || 30,
+              isOnDemand: metadata.isOnDemand || data.isOnDemand || false,
+              scheduledStartTime: metadata.scheduledStartTime || data.scheduledStartTime || null
+            }));
           }
-        });
+        };
 
-        return unsubscribe;
+        const unsubscribe = onMessage(messaging, (payload) => {
+          console.log("[NotificationManager] Received FCM message:", payload);
+          handleMessage(payload);
+        });
+        
+        const handleSWMessage = (event: MessageEvent) => {
+          if (event.data && event.data.type === 'firebase-messaging-sw-message') {
+            console.log("[NotificationManager] Received SW message:", event.data.payload);
+            handleMessage(event.data.payload);
+          }
+        };
+        
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.addEventListener('message', handleSWMessage);
+        }
+
+        return () => {
+           unsubscribe();
+           if ('serviceWorker' in navigator) {
+             navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+           }
+        };
       } catch (err) {
         console.error("[NotificationManager] Setup failed:", err);
       }

@@ -69,22 +69,13 @@ function ChatContent() {
   if (bookingId) {
     return (
       <div className="h-[calc(100vh-64px)] flex flex-col">
-          <div className="p-4 border-b bg-white flex items-center gap-4">
-            <button 
-              onClick={() => router.push('/chat')}
-              className="p-2 hover:bg-slate-100 rounded-full transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5 text-slate-600" />
-            </button>
-            <h2 className="font-bold text-slate-800">Conversation</h2>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <ChatContainer
-              bookingId={bookingId}
-              joined={joined}
-              incomingCallType={callType}
-            />
-          </div>
+        <div className="flex-1 overflow-hidden">
+          <ChatContainer
+            bookingId={bookingId}
+            joined={joined}
+            incomingCallType={callType}
+          />
+        </div>
       </div>
     );
   }

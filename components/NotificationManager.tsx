@@ -123,6 +123,16 @@ export function NotificationManager() {
                 }));
               }
             }
+          } else if (data.type === "call_ended" || data.type === "call_cancelled" || data.type === "call_rejected") {
+            const bookingId = m.bookingId || (m.booking && m.booking.id) || m.booking_id || "";
+
+            // Always clear incoming call
+            dispatch(clearIncomingCall());
+
+            if (currentCallRef.current && String(currentCallRef.current.bookingId) === String(bookingId)) {
+              dispatch(setCallStatus("ended"));
+              setTimeout(() => dispatch(resetCall()), 2000);
+            }
           }
 
           dispatch(addNotification({

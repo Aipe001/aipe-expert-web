@@ -53,6 +53,7 @@ function BookingsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
+  const { needsRefetch } = useSelector((state: RootState) => state.notifications);
   const activeTab = searchParams.get("tab") || "active";
 
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -81,7 +82,7 @@ function BookingsContent() {
       return;
     }
     fetchData();
-  }, [isAuthenticated, router, fetchData]);
+  }, [isAuthenticated, router, fetchData, needsRefetch]);
 
   const setTab = (tab: string) => {
     const params = new URLSearchParams(searchParams);
@@ -329,7 +330,7 @@ function TicketCard({ booking, type, statusSteps, actionLoading, onUpdateStatus,
           {/* Top Line */}
           <div className="flex justify-between items-start">
             <div className="space-y-1">
-              <h3 className="font-bold text-lg">Service: {booking.service?.name || booking.bookAnExpert?.name || "Service"}</h3>
+              <h3 className="font-bold text-lg">Product: {booking.service?.name || booking.bookAnExpert?.name || "Consultation"}</h3>
               <p className="text-sm text-muted-foreground font-medium">Order ID: {booking.bookingNumber}</p>
             </div>
             <p className="text-xs text-muted-foreground">

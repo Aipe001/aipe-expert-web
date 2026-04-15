@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/lib/store/store";
-import { addNotification, setConnected, fetchUnreadCount, dismissNewNotification, setIncomingBookingRequest } from "@/lib/store/slices/notificationSlice";
+import { addNotification, setConnected, fetchUnreadCount, dismissNewNotification, setIncomingBookingRequest, setActiveBooking, triggerRefetch } from "@/lib/store/slices/notificationSlice";
 import { setIncomingCall, clearIncomingCall, setCallStatus, resetCall } from "@/lib/store/slices/callSlice";
 import { toast } from "sonner";
 import { Bell } from "lucide-react";
@@ -145,8 +145,13 @@ export function NotificationManager() {
             isRead: false,
             createdAt: new Date().toISOString()
           } as any));
+          
+          // Trigger refetch for any booking-related events
+          if (data.type === "booking_request" || data.type === "booking_active" || data.type === "booking_accepted" || data.type === "booking_completed") {
+            dispatch(triggerRefetch());
+          }
 
-          if (data.type !== "incoming_call" && data.type !== "booking_request") {
+          if (data.type !== "incoming_call" && data.type !== "booking_request" && data.type !== "booking_active") {
             toast(data.title || "New Notification", {
               description: data.message,
               icon: <Bell className="h-4 w-4 text-[#1C8AFF]" />,
@@ -154,19 +159,32 @@ export function NotificationManager() {
                 label: "View",
                 onClick: () => {
                   if (data.type === "new_message") {
-                    const bookingId = data.metadata?.bookingId || data.bookingId;
+                    const bookingId = m.bookingId || data.bookingId;
                     if (bookingId) router.push(`/chat/${bookingId}`);
                   }
                 },
               },
             });
           } else if (data.type === "booking_request") {
+            // Show toast for new booking update
+            toast.info("New Booking Update", {
+              description: data.message || "A new order is available in your area.",
+              icon: <Bell className="h-4 w-4 text-[#1C8AFF]" />,
+            });
+
             dispatch(setIncomingBookingRequest({
-              bookingRequestId: metadata.bookingRequestId || data.bookingRequestId || data.id,
-              serviceName: metadata.serviceName || data.serviceName || "Service Request",
-              durationMinutes: metadata.durationMinutes || data.durationMinutes || 30,
-              isOnDemand: metadata.isOnDemand || data.isOnDemand || false,
-              scheduledStartTime: metadata.scheduledStartTime || data.scheduledStartTime || null
+              bookingRequestId: m.bookingRequestId || data.bookingRequestId || data.id,
+              serviceName: m.productName || m.serviceName || data.serviceName || "Service Request",
+              durationMinutes: m.durationMinutes || data.durationMinutes || 30,
+              isOnDemand: m.isOnDemand || data.isOnDemand || false,
+              scheduledStartTime: m.scheduledStartTime || data.scheduledStartTime || null
+            }));
+          } else if (data.type === "booking_active") {
+            dispatch(setActiveBooking({
+              bookingId: m.bookingId || data.bookingId,
+              bookingNumber: m.bookingNumber || data.bookingNumber,
+              title: data.title,
+              message: data.message
             }));
           }
         };

@@ -12,6 +12,16 @@ export interface ChatMessage {
     firstName: string;
     lastName: string;
   };
+  isRead?: boolean;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+}
+
+export interface ParticipantStatus {
+  isOnline: boolean;
+  lastActiveAt: string | null;
 }
 
 export interface AgoraSession {
@@ -112,5 +122,18 @@ export const agoraApi = {
   getMessages: async (bookingId: string, after?: string): Promise<ChatMessage[]> => {
     const query = after ? `?after=${encodeURIComponent(after)}` : '';
     return apiClient<ChatMessage[]>(`/agora/chat/${bookingId}/messages${query}`);
+  },
+
+  getParticipantStatus: async (bookingId: string): Promise<ParticipantStatus> => {
+    return apiClient<ParticipantStatus>(`/agora/chat/${bookingId}/participant-status`);
+  },
+
+  uploadAttachment: async (bookingId: string, file: File): Promise<ChatMessage> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiClient<ChatMessage>(`/agora/chat/${bookingId}/attachments`, {
+      method: 'POST',
+      body: formData,
+    });
   },
 };

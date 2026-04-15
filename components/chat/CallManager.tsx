@@ -10,11 +10,13 @@ import { agoraApi } from "@/lib/api/agora";
 // Singleton to hold tracks globally
 let globalLocalAudioTrack: any = null;
 let globalLocalVideoTrack: any = null;
+let globalLocalScreenTrack: any = null;
 let globalAgoraClient: any = null;
 
 export const getGlobalTracks = () => ({
     audioTrack: globalLocalAudioTrack,
     videoTrack: globalLocalVideoTrack,
+    screenTrack: globalLocalScreenTrack,
     client: globalAgoraClient,
 });
 
@@ -116,6 +118,10 @@ export function CallManager() {
             globalLocalVideoTrack.close();
             globalLocalVideoTrack = null;
         }
+        if (globalLocalScreenTrack) {
+            globalLocalScreenTrack.close();
+            globalLocalScreenTrack = null;
+        }
         if (globalAgoraClient) {
             try {
                 await globalAgoraClient.leave();
@@ -123,6 +129,65 @@ export function CallManager() {
             globalAgoraClient = null;
         }
     };
+
+    // Handle Screen Sharing toggle
+    useEffect(() => {
+        const handleScreenShareToggle = async () => {
+            if (!globalAgoraClient || currentCall?.status !== "active") return;
+
+            try {
+                const AgoraRTC = (await import("agora-rtc-sdk-ng")).default;
+
+                if (currentCall.isScreenSharing) {
+                    console.log("[CallManager] Starting screen share...");
+                    // 1. Create screen track
+                    const track = await AgoraRTC.createScreenVideoTrack({}, "auto");
+                    const screenTrack = (Array.isArray(track) ? track[0] : track) as any;
+                    globalLocalScreenTrack = screenTrack;
+
+                    // 2. Handle "Stop Sharing" from browser UI
+                    screenTrack.on("track-ended", () => {
+                        console.log("[CallManager] Screen share track ended by user");
+                        dispatch(updateCallDetails({ isScreenSharing: false }));
+                    });
+
+                    // 3. Unpublish camera if active
+                    if (globalLocalVideoTrack) {
+                        await globalAgoraClient.unpublish([globalLocalVideoTrack]);
+                    }
+
+                    // 4. Publish screen
+                    await globalAgoraClient.publish([screenTrack]);
+                    console.log("[CallManager] Screen share published");
+                } else {
+                    console.log("[CallManager] Stopping screen share...");
+                    // 1. Unpublish and close screen track
+                    if (globalLocalScreenTrack) {
+                        try {
+                            await globalAgoraClient.unpublish([globalLocalScreenTrack]);
+                        } catch {}
+                        globalLocalScreenTrack.close();
+                        globalLocalScreenTrack = null;
+                    }
+
+                    // 2. Restore camera if enabled
+                    if (currentCall.isVideoEnabled && globalLocalVideoTrack) {
+                        await globalAgoraClient.publish([globalLocalVideoTrack]);
+                        console.log("[CallManager] Camera restored after screen share");
+                    }
+                }
+            } catch (err) {
+                console.error("[CallManager] Screen share error:", err);
+                dispatch(updateCallDetails({ isScreenSharing: false }));
+                // If it failed to start, try to restore camera
+                if (currentCall?.isVideoEnabled && globalLocalVideoTrack && !globalLocalVideoTrack.isPublished) {
+                    globalAgoraClient?.publish([globalLocalVideoTrack]).catch(() => {});
+                }
+            }
+        };
+
+        handleScreenShareToggle();
+    }, [currentCall?.isScreenSharing]);
 
     // Synchronize Mute/Video states from Redux to Agora
     useEffect(() => {

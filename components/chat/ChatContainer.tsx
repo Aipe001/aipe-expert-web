@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState, AppDispatch } from "@/lib/store/store";
 import { getBookingById, Booking } from "@/lib/api/bookings";
-import { agoraApi, ChatMessage } from "@/lib/api/agora";
+import { agoraApi, ChatMessage, ParticipantStatus } from "@/lib/api/agora";
 import {
   initiateCall,
   setIncomingCall,
@@ -14,6 +14,7 @@ import {
   toggleMute,
   toggleVideo,
   toggleSpeaker,
+  toggleScreenSharing,
   endCall,
   resetCall,
   CallType,
@@ -33,9 +34,15 @@ import {
   PhoneOff,
   Volume2,
   VolumeX,
-  Send,
   Loader2,
   RefreshCcw,
+  Check,
+  CheckCheck,
+  Send,
+  Download,
+  FileText,
+  Monitor,
+  MonitorOff,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -62,6 +69,10 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [participantStatus, setParticipantStatus] = useState<ParticipantStatus | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -124,10 +135,13 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   // Handle Video Rendering
   useEffect(() => {
     if (currentCall?.status === "active") {
-      const { audioTrack, videoTrack, client } = getGlobalTracks();
+      const { audioTrack, videoTrack, screenTrack, client } = getGlobalTracks();
 
       if (currentCall.callType === "video") {
-        if (currentCall.isVideoEnabled && videoTrack && localVideoRef.current) {
+        // Local rendering: Screen track takes priority if sharing
+        if (currentCall.isScreenSharing && screenTrack && localVideoRef.current) {
+          screenTrack.play(localVideoRef.current);
+        } else if (currentCall.isVideoEnabled && videoTrack && localVideoRef.current) {
           videoTrack.play(localVideoRef.current);
         }
 
@@ -141,7 +155,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
         }
       }
     }
-  }, [currentCall?.status, currentCall?.isVideoEnabled, currentCall?.remoteUid, currentCall?.isLocalStreamActive]);
+  }, [currentCall?.status, currentCall?.isVideoEnabled, currentCall?.isScreenSharing, currentCall?.remoteUid, currentCall?.isLocalStreamActive]);
 
   const checkExistingCall = async () => {
     try {
@@ -178,14 +192,18 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   const loadBookingAndMessages = async () => {
     try {
       setLoading(true);
-      const [bookingData, messagesData] = await Promise.allSettled([
+      const [bookingData, messagesData, pStatus] = await Promise.allSettled([
         getBookingById(bookingId),
         agoraApi.getMessages(bookingId),
+        agoraApi.getParticipantStatus(bookingId),
       ]);
 
       if (bookingData.status === "fulfilled") setBooking(bookingData.value);
       if (messagesData.status === "fulfilled") {
         setMessages(messagesData.value);
+      }
+      if (pStatus.status === "fulfilled") {
+        setParticipantStatus(pStatus.value);
       }
     } catch (err) {
       console.error("Failed to load chat:", err);
@@ -207,6 +225,8 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
             return unique.length > 0 ? [...prev, ...unique] : prev;
           });
         }
+        
+        agoraApi.getParticipantStatus(bookingId).then(setParticipantStatus).catch(() => {});
       } catch {
         // Silently handle
       }
@@ -247,6 +267,44 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
       setSending(false);
     }
   }, [inputText, sending, bookingId, user]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || isUploading) return;
+
+    setIsUploading(true);
+    const tempId = `temp_attach_${Date.now()}`;
+    const isImage = file.type.startsWith('image/');
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      bookingId,
+      senderId: user?.id || '',
+      content: file.name,
+      messageType: isImage ? 'image' : 'document',
+      createdAt: new Date().toISOString(),
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type,
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+
+    try {
+      const saved = await agoraApi.uploadAttachment(bookingId, file);
+      setMessages((prev) => prev.map((m) => (m.id === tempId ? saved : m)));
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      toast.error('Failed to upload attachment');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
 
   const stopCallTimer = () => {
     if (callTimerRef.current) {
@@ -454,9 +512,19 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
         </div>
 
         <div className="flex-1 min-w-0">
-          <h2 className="font-bold text-lg leading-tight truncate">{getParticipantName()}</h2>
-          <p className="text-xs text-white/80">
-            {booking?.service?.name || "Consultation"} · #{booking?.bookingNumber}
+          <div className="flex items-center gap-2">
+            <h2 className="font-bold text-lg leading-tight truncate">{getParticipantName()}</h2>
+            {participantStatus && (
+              <div className="flex items-center gap-1.5 bg-white/10 px-2 py-0.5 rounded-full">
+                <span className={cn("w-2 h-2 rounded-full", participantStatus.isOnline ? "bg-green-400" : "bg-slate-300")} />
+                <span className="text-[10px] font-medium text-white/90">
+                  {participantStatus.isOnline ? 'Online' : (participantStatus.lastActiveAt ? `Last seen ${new Date(participantStatus.lastActiveAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'Offline')}
+                </span>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-white/80 mt-0.5">
+            {booking?.service?.name || booking?.bookAnExpert?.name || "Consultation"} · #{booking?.bookingNumber}
           </p>
         </div>
 
@@ -486,15 +554,27 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
 
       {/* Service Info Bar */}
       <div className="bg-white border-b border-slate-100 px-6 py-3 flex items-center justify-between shrink-0 shadow-sm">
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium text-slate-900">
-            <span className="text-slate-500 font-normal">Service : </span>
-            {booking?.service?.name || "Consultation"}
-          </p>
-          <p className="text-sm font-medium text-slate-900">
-            <span className="text-slate-500 font-normal">Booked on : </span>
-            {booking?.scheduledAt ? new Date(booking.scheduledAt).toLocaleDateString() : "N/A"}
-          </p>
+        <div className="flex flex-wrap gap-x-8 gap-y-2">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-900">
+              <span className="text-slate-500 font-normal">Product Name: </span>
+              {booking?.service?.name || booking?.bookAnExpert?.name || "Consultation"}
+            </p>
+            <p className="text-sm font-medium text-slate-900">
+              <span className="text-slate-500 font-normal">Order ID: </span>
+              {booking?.bookingNumber || "N/A"}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-900">
+              <span className="text-slate-500 font-normal">Booked on: </span>
+              {booking?.createdAt ? new Date(booking.createdAt).toLocaleDateString() : "N/A"}
+            </p>
+            <p className="text-sm font-medium text-slate-900">
+              <span className="text-slate-500 font-normal">Product Type: </span>
+              <span className="capitalize">{booking?.productType?.replace(/_/g, ' ') || "Service"}</span>
+            </p>
+          </div>
         </div>
         <div className="text-right">
           <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Status</p>
@@ -569,6 +649,16 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                         >
                           {currentCall?.isVideoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
                         </button>
+                        <button
+                          onClick={() => dispatch(toggleScreenSharing())}
+                          className={cn(
+                            "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
+                            currentCall?.isScreenSharing ? "bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.6)]" : "bg-white/20 hover:bg-white/30"
+                          )}
+                          title={currentCall?.isScreenSharing ? "Stop Sharing" : "Share Screen"}
+                        >
+                          {currentCall?.isScreenSharing ? <MonitorOff className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
+                        </button>
                       </>
                     )}
                     <button
@@ -613,8 +703,13 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                   )}
                 </div>
                 {/* Local video (PIP) */}
-                {currentCall?.isVideoEnabled && (
+                {(currentCall?.isVideoEnabled || currentCall?.isScreenSharing) && (
                   <div className="absolute bottom-4 right-4 w-32 h-24 rounded-xl overflow-hidden border-2 border-white/30 shadow-lg bg-slate-800">
+                    {currentCall?.isScreenSharing && (
+                      <div className="absolute inset-0 z-10 bg-blue-600/20 flex items-center justify-center">
+                        <Monitor className="h-4 w-4 text-white animate-pulse" />
+                      </div>
+                    )}
                     <div ref={localVideoRef} className="w-full h-full" />
                   </div>
                 )}
@@ -644,14 +739,76 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                   : "bg-white text-slate-700 rounded-tl-none border border-slate-100"
               )}
             >
-              {msg.content}
+              {/* Image attachment */}
+              {msg.messageType === 'image' && msg.fileUrl ? (
+                <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" className="block">
+                  <img
+                    src={msg.fileUrl}
+                    alt={msg.fileName || 'Image'}
+                    className="max-w-[240px] max-h-[180px] rounded-lg object-cover mb-1 cursor-pointer hover:opacity-90 transition-opacity"
+                  />
+                  <p className={cn(
+                    "text-xs truncate mt-1",
+                    isMyMessage(msg) ? "text-blue-100" : "text-slate-400"
+                  )}>{msg.fileName || 'Image'}</p>
+                </a>
+              ) : msg.messageType === 'document' && msg.fileUrl ? (
+                /* Document attachment card */
+                <a
+                  href={msg.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "flex items-center gap-3 p-2.5 rounded-xl transition-colors",
+                    isMyMessage(msg)
+                      ? "bg-white/15 hover:bg-white/25"
+                      : "bg-slate-50 hover:bg-slate-100 border border-slate-100"
+                  )}
+                >
+                  <div className={cn(
+                    "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
+                    isMyMessage(msg) ? "bg-white/20" : "bg-indigo-50"
+                  )}>
+                    <FileText className={cn(
+                      "h-5 w-5",
+                      isMyMessage(msg) ? "text-white" : "text-indigo-500"
+                    )} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn(
+                      "text-sm font-medium truncate",
+                      isMyMessage(msg) ? "text-white" : "text-slate-800"
+                    )}>{msg.fileName || 'File'}</p>
+                    {msg.fileSize && (
+                      <p className={cn(
+                        "text-[10px]",
+                        isMyMessage(msg) ? "text-blue-200" : "text-slate-400"
+                      )}>{formatFileSize(msg.fileSize)}</p>
+                    )}
+                  </div>
+                  <Download className={cn(
+                    "h-4 w-4 shrink-0",
+                    isMyMessage(msg) ? "text-white/70" : "text-indigo-400"
+                  )} />
+                </a>
+              ) : (
+                /* Normal text message */
+                <>{msg.content}</>
+              )}
+              <div className={cn(
+                "flex flex-row items-center justify-end gap-1 mt-1 -mb-1",
+                isMyMessage(msg) ? "text-blue-100" : "text-slate-400"
+              )}>
+                <div className="text-[10px] font-medium text-right">
+                  {formatTime(msg.createdAt)}
+                </div>
+                {isMyMessage(msg) && (
+                  msg.isRead ? 
+                    <CheckCheck className="w-3.5 h-3.5 text-blue-200" /> : 
+                    <Check className="w-3.5 h-3.5 text-blue-200/70" />
+                )}
+              </div>
             </div>
-            <p className={cn(
-              "text-[10px] mt-1 px-1",
-              isMyMessage(msg) ? "text-right text-slate-400" : "text-slate-400"
-            )}>
-              {formatTime(msg.createdAt)}
-            </p>
           </motion.div>
         ))}
 
@@ -685,7 +842,20 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
               className="border-none shadow-none focus-visible:ring-0 bg-transparent text-slate-700 placeholder:text-slate-400 h-10 px-0"
             />
             <div className="flex items-center gap-3 text-slate-400 pl-2">
-              <Paperclip className="h-5 w-5 cursor-pointer hover:text-[#1C8AFF] transition-colors" />
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              {isUploading ? (
+                <Loader2 className="h-5 w-5 animate-spin text-[#1C8AFF]" />
+              ) : (
+                <Paperclip
+                  className="h-5 w-5 cursor-pointer hover:text-[#1C8AFF] transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                />
+              )}
               <Camera className="h-5 w-5 cursor-pointer hover:text-[#1C8AFF] transition-colors" />
             </div>
           </div>

@@ -176,7 +176,7 @@ function ChatContent() {
                       )}
                     </div>
                     <p className="text-sm text-slate-500 truncate mt-0.5">
-                      {lastMsg?.content || `${booking.service?.name || "Consultation"} · #${booking.bookingNumber}`}
+                      {lastMsg?.content || `${booking.service?.name || booking.bookAnExpert?.name || "Consultation"} · #${booking.bookingNumber}`}
                     </p>
                   </div>
                   <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-slate-400 group-hover:translate-x-0.5 transition-all" />

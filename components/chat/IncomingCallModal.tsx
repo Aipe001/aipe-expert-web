@@ -65,8 +65,19 @@ export function IncomingCallModal() {
         handleReject();
       }, 30000);
 
+      // Fallback poller to check if call was accepted/ended elsewhere
+      const statusPoll = setInterval(async () => {
+        try {
+          const { status } = await agoraApi.getCallStatus(incomingCall.bookingId);
+          if (status === "active" || status === "none" || status === "ended") {
+            dismiss();
+          }
+        } catch { }
+      }, 3000);
+
       return () => {
         if (intervalRef.current) clearInterval(intervalRef.current);
+        clearInterval(statusPoll);
         clearTimeout(timeout);
       };
     }

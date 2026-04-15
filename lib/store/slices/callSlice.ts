@@ -18,6 +18,7 @@ interface CallInfo {
     agoraChannel?: string;
     agoraUid?: number;
     remoteUid?: number | null;
+    isScreenSharing: boolean;
 }
 
 interface GlobalCallState {
@@ -58,6 +59,7 @@ const callSlice = createSlice({
                 isMuted: false,
                 isVideoEnabled: action.payload.callType === "video",
                 isSpeakerEnabled: true,
+                isScreenSharing: false,
             };
         },
         setCallStatus: (state, action: PayloadAction<CallState>) => {
@@ -86,6 +88,7 @@ const callSlice = createSlice({
                     isMuted: false,
                     isVideoEnabled: action.payload.callType === "video",
                     isSpeakerEnabled: true,
+                    isScreenSharing: false,
                     ...action.payload
                 } as CallInfo;
             }
@@ -103,6 +106,11 @@ const callSlice = createSlice({
         toggleSpeaker: (state) => {
             if (state.currentCall) {
                 state.currentCall.isSpeakerEnabled = !state.currentCall.isSpeakerEnabled;
+            }
+        },
+        toggleScreenSharing: (state) => {
+            if (state.currentCall) {
+                state.currentCall.isScreenSharing = !state.currentCall.isScreenSharing;
             }
         },
         endCall: (state) => {
@@ -125,6 +133,7 @@ export const {
     toggleMute,
     toggleVideo,
     toggleSpeaker,
+    toggleScreenSharing,
     endCall,
     resetCall,
 } = callSlice.actions;

@@ -14,8 +14,12 @@ export interface Notification {
 interface NotificationState {
   notifications: Notification[];
   unreadCount: number;
+  unreadCountExpert: number;
+  unreadCountUser: number;
   newNotification: Notification | null;
   incomingBookingRequest: Record<string, any> | null;
+  activeBooking: Record<string, any> | null;
+  needsRefetch: boolean;
   connected: boolean;
   loading: boolean;
 }
@@ -24,8 +28,12 @@ interface NotificationState {
 const initialState: NotificationState = {
   notifications: [],
   unreadCount: 0,
+  unreadCountExpert: 0,
+  unreadCountUser: 0,
   newNotification: null,
   incomingBookingRequest: null,
+  activeBooking: null,
+  needsRefetch: false,
   connected: false,
   loading: false,
 };
@@ -72,6 +80,15 @@ const notificationSlice = createSlice({
     clearIncomingBookingRequest: (state) => {
       state.incomingBookingRequest = null;
     },
+    setActiveBooking: (state, action: PayloadAction<Record<string, any> | null>) => {
+      state.activeBooking = action.payload;
+    },
+    clearActiveBooking: (state) => {
+      state.activeBooking = null;
+    },
+    triggerRefetch: (state) => {
+      state.needsRefetch = !state.needsRefetch; // Toggle to trigger useEffect
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -92,6 +109,9 @@ export const {
   markAsRead,
   setIncomingBookingRequest,
   clearIncomingBookingRequest,
+  setActiveBooking,
+  clearActiveBooking,
+  triggerRefetch,
 } = notificationSlice.actions;
 
 export default notificationSlice.reducer;

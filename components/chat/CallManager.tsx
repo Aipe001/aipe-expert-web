@@ -67,7 +67,12 @@ export function CallManager() {
 
             client.on("user-published", async (remoteUser: any, mediaType: "audio" | "video") => {
                 await client.subscribe(remoteUser, mediaType);
-                dispatch(updateCallDetails({ remoteUid: remoteUser.uid as number }));
+                
+                const update: any = { remoteUid: remoteUser.uid as number };
+                if (mediaType === "video") {
+                    update.remoteVideoVersion = Date.now();
+                }
+                dispatch(updateCallDetails(update));
 
                 if (mediaType === "audio") {
                     remoteUser.audioTrack?.play();

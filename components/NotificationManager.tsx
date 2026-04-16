@@ -6,7 +6,7 @@ import { AppDispatch, RootState } from "@/lib/store/store";
 import { addNotification, setConnected, fetchUnreadCount, dismissNewNotification, setIncomingBookingRequest, setActiveBooking, triggerRefetch } from "@/lib/store/slices/notificationSlice";
 import { setIncomingCall, clearIncomingCall, setCallStatus, resetCall } from "@/lib/store/slices/callSlice";
 import { toast } from "sonner";
-import { Bell } from "lucide-react";
+import { Bell, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "@/lib/api/client";
 import { app, getFirebaseMessaging } from "@/lib/firebase";
@@ -154,16 +154,14 @@ export function NotificationManager() {
           if (data.type !== "incoming_call" && data.type !== "booking_request" && data.type !== "booking_active") {
             toast(data.title || "New Notification", {
               description: data.message,
-              icon: <Bell className="h-4 w-4 text-[#1C8AFF]" />,
-              action: {
-                label: "View",
+              icon: data.type === "new_message" ? <MessageSquare className="h-4 w-4 text-[#1C8AFF]" /> : <Bell className="h-4 w-4 text-[#1C8AFF]" />,
+              action: data.type === "new_message" ? {
+                label: "View Chat",
                 onClick: () => {
-                  if (data.type === "new_message") {
-                    const bookingId = m.bookingId || data.bookingId;
-                    if (bookingId) router.push(`/chat/${bookingId}`);
-                  }
+                  const bookingId = m.bookingId || data.bookingId;
+                  if (bookingId) router.push(`/chat/${bookingId}`);
                 },
-              },
+              } : undefined,
             });
           } else if (data.type === "booking_request") {
             // Show toast for new booking update

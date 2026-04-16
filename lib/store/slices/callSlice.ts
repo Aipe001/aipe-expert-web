@@ -19,6 +19,7 @@ interface CallInfo {
     agoraUid?: number;
     remoteUid?: number | null;
     isScreenSharing: boolean;
+    remoteVideoVersion?: number;
 }
 
 interface GlobalCallState {

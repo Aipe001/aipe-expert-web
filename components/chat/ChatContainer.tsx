@@ -4,8 +4,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState, AppDispatch } from "@/lib/store/store";
-import { getBookingById, Booking } from "@/lib/api/bookings";
+import { getBookingById, updateBookingStatus, Booking } from "@/lib/api/bookings";
 import { agoraApi, ChatMessage, ParticipantStatus } from "@/lib/api/agora";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   initiateCall,
   setIncomingCall,
@@ -43,6 +49,7 @@ import {
   FileText,
   Monitor,
   MonitorOff,
+  ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -56,6 +63,19 @@ interface ChatContainerProps {
   joined?: boolean;
   incomingCallType?: "audio" | "video" | null;
 }
+
+const STATUS_OPTIONS = [
+  "Document Requested",
+  "Document Received",
+  "Document Under Review",
+  "Resubmit Documents",
+  "Submitted to Gov. Dept",
+  "Waiting From Gov. Department",
+  "Approved",
+  "Accepted",
+  "Rejected",
+  "Service Completed",
+];
 
 export function ChatContainer({ bookingId, joined, incomingCallType }: ChatContainerProps) {
   const router = useRouter();
@@ -71,6 +91,8 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   const [sending, setSending] = useState(false);
   const [participantStatus, setParticipantStatus] = useState<ParticipantStatus | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isStatusOpen, setIsStatusOpen] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -155,7 +177,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
         }
       }
     }
-  }, [currentCall?.status, currentCall?.isVideoEnabled, currentCall?.isScreenSharing, currentCall?.remoteUid, currentCall?.isLocalStreamActive]);
+  }, [currentCall?.status, currentCall?.isVideoEnabled, currentCall?.isScreenSharing, currentCall?.remoteUid, currentCall?.remoteVideoVersion, currentCall?.isLocalStreamActive]);
 
   const checkExistingCall = async () => {
     try {
@@ -267,6 +289,37 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
       setSending(false);
     }
   }, [inputText, sending, bookingId, user]);
+
+  const handleStatusUpdate = async (status: string) => {
+    if (!bookingId || updatingStatus) return;
+
+    setUpdatingStatus(true);
+    try {
+      await updateBookingStatus(bookingId, status);
+      toast.success(`Status updated to "${status}"`);
+      setIsStatusOpen(false);
+      // Refresh booking data
+      const updatedBooking = await getBookingById(bookingId);
+      setBooking(updatedBooking);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update status");
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const getStatusSteps = (status: string) => {
+    // These match the logic in bookings/page.tsx
+    const isCompleted = status === "completed" || status === "Service Completed";
+    const isActive = status === "active" || status === "Document Under Review" || isCompleted;
+    
+    return [
+      { label: "Doc Requested", completed: true },
+      { label: "Doc Received", completed: status !== "pending_payment" },
+      { label: "Under Review", completed: isActive },
+      { label: "Completed", completed: isCompleted },
+    ];
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -578,13 +631,51 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
         </div>
         <div className="text-right">
           <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Status</p>
-          <p className={cn(
-            "text-sm font-bold capitalize",
-            booking?.status === "active" ? "text-green-600" :
-              booking?.status === "completed" ? "text-blue-600" : "text-amber-600"
-          )}>
-            {booking?.status || "Active"}
-          </p>
+          <div className="flex flex-col items-end">
+            <p className={cn(
+              "text-sm font-bold",
+              booking?.status === "active" || booking?.status === "Document Under Review" ? "text-green-600" :
+                booking?.status === "completed" || booking?.status === "Service Completed" ? "text-blue-600" : "text-amber-600"
+            )}>
+              {booking?.status || "Active"}
+            </p>
+            <button 
+              onClick={() => setIsStatusOpen(true)}
+              className="text-[10px] font-bold text-[#1C8AFF] hover:underline"
+            >
+              Update Status
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Status Timeline Bar - Similar to Booking List Page */}
+      <div className="bg-white border-b border-slate-100 px-6 py-4 shrink-0">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Service Tracking</p>
+          <button
+            onClick={() => setIsStatusOpen(true)}
+            className="text-xs font-bold text-[#1C8AFF] flex items-center gap-1 hover:underline"
+          >
+            Update New Status <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <div className="relative flex justify-between items-center px-4 max-w-2xl mx-auto">
+          <div className="absolute top-1.5 left-4 right-4 h-0.5 bg-slate-100 z-0" />
+          {getStatusSteps(booking?.status || "active").map((step, idx) => (
+            <div key={step.label} className="relative z-10 flex flex-col items-center gap-2">
+              <div className={cn(
+                "w-3.5 h-3.5 rounded-full border-2 transition-colors duration-500 shadow-sm",
+                step.completed ? "bg-[#1C8AFF] border-[#1C8AFF]" : "bg-white border-slate-200"
+              )} />
+              <span className={cn(
+                "text-[10px] whitespace-nowrap",
+                step.completed ? "text-slate-900 font-bold" : "text-slate-400 font-medium"
+              )}>
+                {step.label}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -879,6 +970,39 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
           )}
         </div>
       </footer>
+
+      {/* Select Status Dialog */}
+      <Dialog open={isStatusOpen} onOpenChange={setIsStatusOpen}>
+        <DialogContent className="max-w-md p-0 overflow-hidden bg-white">
+          <DialogHeader className="p-6 border-b">
+            <DialogTitle>Select Status</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto py-2">
+            {STATUS_OPTIONS.map((status) => (
+              <button
+                key={status}
+                disabled={updatingStatus}
+                onClick={() => handleStatusUpdate(status)}
+                className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors border-b last:border-0 disabled:opacity-50"
+              >
+                <div className="flex items-center gap-3">
+                  <span className={cn(
+                    "text-sm font-medium",
+                    booking?.status === status ? "text-[#1C8AFF]" : "text-slate-700"
+                  )}>{status}</span>
+                  {booking?.status === status && <Check className="h-3.5 w-3.5 text-[#1C8AFF]" />}
+                </div>
+                {updatingStatus && booking?.status !== status ? null : (
+                    <ChevronRight className="h-4 w-4 text-slate-400" />
+                )}
+                {updatingStatus && booking?.status === status && (
+                    <Loader2 className="h-4 w-4 animate-spin text-[#1C8AFF]" />
+                )}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

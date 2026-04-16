@@ -7,11 +7,6 @@ const firebaseConfig = {
   projectId: "aipe-edfeb",
   messagingSenderId: "1032054778017",
   appId: "1:1032054778017:web:eae3e1de00ea2713faa8e0"
-  apiKey: "AIzaSyA38sb_Qi2BBthqL23APfY7Afc6JimNZ6c",
-  authDomain: "aipe-edfeb.firebaseapp.com",
-  projectId: "aipe-edfeb",
-  messagingSenderId: "1032054778017",
-  appId: "1:1032054778017:web:eae3e1de00ea2713faa8e0"
 };
 
 try {

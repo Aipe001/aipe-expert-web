@@ -41,7 +41,7 @@ export function NotificationManager() {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
           const fcmToken = await getToken(messaging, {
-            vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+            vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY || "BOytKcvfv4dQb3jHJUkwjn0gw9IH888lGLI3Xzda1s9U86qqmyG4DJ77QVkFnC-tQE5VImxzXDeE4jzmOpUpmdg",
           });
 
           if (fcmToken) {

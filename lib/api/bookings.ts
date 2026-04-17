@@ -61,6 +61,7 @@ export interface Booking {
   service?: { id: string; name: string };
   bookAnExpert?: { id: string; name: string };
   user?: { id: string; firstName: string; lastName: string; phone: string };
+  timeline?: any[];
 }
 
 export const getExpertBookingRequests = async (): Promise<BookingRequest[]> => {
@@ -103,6 +104,17 @@ export const getBookingById = async (id: string): Promise<Booking> => {
 
 export const getBookingRequestById = async (id: string): Promise<BookingRequest> => {
   return apiClient<BookingRequest>(`/bookings/requests/${id}`);
+};
+
+export const addBookingTimeline = async (
+  id: string,
+  title: string,
+  description?: string,
+): Promise<any> => {
+  return apiClient(`/bookings/${id}/timeline`, {
+    method: "POST",
+    body: JSON.stringify({ title, description }),
+  });
 };
 
 

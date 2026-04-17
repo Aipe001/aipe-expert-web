@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState, AppDispatch } from "@/lib/store/store";
-import { getBookingById, updateBookingStatus, Booking } from "@/lib/api/bookings";
+import { getBookingById, updateBookingStatus, addBookingTimeline, Booking } from "@/lib/api/bookings";
 import { agoraApi, ChatMessage, ParticipantStatus } from "@/lib/api/agora";
 import {
   Dialog,
@@ -295,14 +295,25 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
 
     setUpdatingStatus(true);
     try {
-      await updateBookingStatus(bookingId, status);
-      toast.success(`Status updated to "${status}"`);
+      // Differentiate between status update and timeline tracking
+      const coreStatuses = ["active", "completed", "cancelled"];
+      const isCoreStatus = coreStatuses.includes(status.toLowerCase().replace(/ /g, "_"));
+
+      if (isCoreStatus) {
+        await updateBookingStatus(bookingId, status.toLowerCase().replace(/ /g, "_"));
+        toast.success(`Status updated to "${status}"`);
+      } else {
+        // Timeline tracking update
+        await addBookingTimeline(bookingId, status);
+        toast.success(`Tracking updated: "${status}"`);
+      }
+
       setIsStatusOpen(false);
       // Refresh booking data
       const updatedBooking = await getBookingById(bookingId);
       setBooking(updatedBooking);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to update status");
+      toast.error(err instanceof Error ? err.message : "Failed to update tracking");
     } finally {
       setUpdatingStatus(false);
     }
@@ -549,135 +560,65 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
 
   return (
     <div className="flex flex-col h-full bg-[#F4F7F9] overflow-hidden">
-      {/* Header */}
-      <header className="bg-[#1C8AFF] text-white px-4 py-3 flex items-center gap-3 shrink-0 pt-6 md:pt-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleBack}
-          className="text-white hover:bg-white/10 -ml-2 h-10 w-10"
-        >
-          <ChevronLeft className="h-6 w-6 stroke-[2.5px]" />
-        </Button>
-
-        <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-          <User className="h-6 w-6" />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="font-bold text-lg leading-tight truncate">{getParticipantName()}</h2>
-            {participantStatus && (
-              <div className="flex items-center gap-1.5 bg-white/10 px-2 py-0.5 rounded-full">
-                <span className={cn("w-2 h-2 rounded-full", participantStatus.isOnline ? "bg-green-400" : "bg-slate-300")} />
-                <span className="text-[10px] font-medium text-white/90">
-                  {participantStatus.isOnline ? 'Online' : (participantStatus.lastActiveAt ? `Last seen ${new Date(participantStatus.lastActiveAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'Offline')}
-                </span>
-              </div>
-            )}
-          </div>
-          <p className="text-xs text-white/80 mt-0.5">
-            {booking?.service?.name || booking?.bookAnExpert?.name || "Consultation"} · #{booking?.bookingNumber}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => !isInCall && handleStartCall("audio")}
-            disabled={isInCall}
-            className={cn(
-              "h-10 w-10 rounded-full flex items-center justify-center cursor-pointer transition-colors",
-              isInCall ? "bg-white/10 opacity-50 cursor-not-allowed" : "bg-green-500 hover:bg-green-600"
-            )}
-          >
-            <Phone className="h-5 w-5 fill-white text-white" />
-          </button>
-          <button
-            onClick={() => !isInCall && handleStartCall("video")}
-            disabled={isInCall}
-            className={cn(
-              "h-10 w-10 rounded-full flex items-center justify-center cursor-pointer transition-colors",
-              isInCall ? "bg-white/10 opacity-50 cursor-not-allowed" : "bg-white/20 hover:bg-white/30"
-            )}
-          >
-            <Video className="h-5 w-5 fill-white text-white" />
-          </button>
-        </div>
-      </header>
-
-      {/* Service Info Bar */}
-      <div className="bg-white border-b border-slate-100 px-6 py-3 flex items-center justify-between shrink-0 shadow-sm">
-        <div className="flex flex-wrap gap-x-8 gap-y-2">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-slate-900">
-              <span className="text-slate-500 font-normal">Product Name: </span>
-              {booking?.service?.name || booking?.bookAnExpert?.name || "Consultation"}
-            </p>
-            <p className="text-sm font-medium text-slate-900">
-              <span className="text-slate-500 font-normal">Order ID: </span>
-              {booking?.bookingNumber || "N/A"}
-            </p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-slate-900">
-              <span className="text-slate-500 font-normal">Booked on: </span>
-              {booking?.createdAt ? new Date(booking.createdAt).toLocaleDateString() : "N/A"}
-            </p>
-            <p className="text-sm font-medium text-slate-900">
-              <span className="text-slate-500 font-normal">Product Type: </span>
-              <span className="capitalize">{booking?.productType?.replace(/_/g, ' ') || "Service"}</span>
-            </p>
-          </div>
-        </div>
-        <div className="text-right">
-          <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Status</p>
-          <div className="flex flex-col items-end">
-            <p className={cn(
-              "text-sm font-bold",
-              booking?.status === "active" || booking?.status === "Document Under Review" ? "text-green-600" :
-                booking?.status === "completed" || booking?.status === "Service Completed" ? "text-blue-600" : "text-amber-600"
-            )}>
-              {booking?.status || "Active"}
-            </p>
-            <button 
-              onClick={() => setIsStatusOpen(true)}
-              className="text-[10px] font-bold text-[#1C8AFF] hover:underline"
+    <div className="flex h-full bg-[#F8FAFC]">
+      {/* Left Chat Main Area */}
+      <div className="flex-1 flex flex-col min-w-0 border-r border-slate-200">
+        {/* Header */}
+        <div className="h-16 flex items-center justify-between px-6 bg-white border-b border-slate-100 shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleBack}
+              className="p-2 hover:bg-slate-50 rounded-full transition-colors lg:hidden"
             >
-              Update Status
+              <ChevronLeft className="h-5 w-5 text-slate-600" />
             </button>
+            <div className="h-10 w-10 rounded-full bg-[#1C8AFF]/10 flex items-center justify-center text-[#1C8AFF] font-bold">
+              {getParticipantName() ? getParticipantName()[0] : "C"}
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-slate-900 line-clamp-1">{getParticipantName()}</h1>
+              <p className="text-[10px] text-slate-500 font-medium">#{booking?.bookingNumber}</p>
+            </div>
           </div>
-        </div>
-      </div>
-
-      {/* Status Timeline Bar - Similar to Booking List Page */}
-      <div className="bg-white border-b border-slate-100 px-6 py-4 shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Service Tracking</p>
-          <button
-            onClick={() => setIsStatusOpen(true)}
-            className="text-xs font-bold text-[#1C8AFF] flex items-center gap-1 hover:underline"
-          >
-            Update New Status <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div className="relative flex justify-between items-center px-4 max-w-2xl mx-auto">
-          <div className="absolute top-1.5 left-4 right-4 h-0.5 bg-slate-100 z-0" />
-          {getStatusSteps(booking?.status || "active").map((step, idx) => (
-            <div key={step.label} className="relative z-10 flex flex-col items-center gap-2">
-              <div className={cn(
-                "w-3.5 h-3.5 rounded-full border-2 transition-colors duration-500 shadow-sm",
-                step.completed ? "bg-[#1C8AFF] border-[#1C8AFF]" : "bg-white border-slate-200"
-              )} />
+          
+          <div className="flex items-center gap-4">
+            <div className="hidden md:flex flex-col items-end mr-2">
+              <span className="text-[10px] text-slate-400 uppercase font-bold">Current Status</span>
               <span className={cn(
-                "text-[10px] whitespace-nowrap",
-                step.completed ? "text-slate-900 font-bold" : "text-slate-400 font-medium"
+                "text-xs font-bold capitalize",
+                booking?.status === "active" ? "text-green-600" :
+                booking?.status === "completed" ? "text-blue-600" : "text-amber-600"
               )}>
-                {step.label}
+                {booking?.status || "Active"}
               </span>
             </div>
-          ))}
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => !isInCall && handleStartCall("audio")}
+                disabled={isInCall}
+                className={cn(
+                  "h-9 w-9 rounded-full flex items-center justify-center transition-all duration-300",
+                  "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-sm"
+                )}
+              >
+                <Phone className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => !isInCall && handleStartCall("video")}
+                disabled={isInCall}
+                className={cn(
+                  "h-9 w-9 rounded-full flex items-center justify-center transition-all duration-300",
+                  "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-sm"
+                )}
+              >
+                <Video className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+
+
 
       {/* Call Banner */}
       <AnimatePresence>
@@ -970,6 +911,108 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
           )}
         </div>
       </footer>
+        </div>
+      </div>
+
+      {/* Right Sidebar - Status Timeline Tracking */}
+      <div className="w-80 hidden xl:flex flex-col bg-white border-l border-slate-200 overflow-hidden shrink-0">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-[#1C8AFF]/5">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Tracking</h2>
+            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Live service updates</p>
+          </div>
+          <button 
+            onClick={() => setIsStatusOpen(true)}
+            className="p-2 hover:bg-[#1C8AFF]/10 rounded-full transition-colors text-[#1C8AFF]"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="relative">
+            {/* Timeline Line */}
+            <div className="absolute left-[11px] top-2 bottom-2 w-[2px] bg-slate-100" />
+            
+            <div className="space-y-8">
+              {/* Core Status: Created */}
+              <div className="relative pl-10">
+                <div className="absolute left-0 top-1 h-6 w-6 rounded-full bg-green-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
+                  <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900">Booking Started</h3>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{booking ? new Date(booking.createdAt).toLocaleString() : ""}</p>
+                </div>
+              </div>
+
+              {/* Dynamic Timeline Entries */}
+              {(booking?.timeline || []).slice().reverse().map((entry: any, idx: number) => (
+                <div key={entry.id} className="relative pl-10 group">
+                  <div className={cn(
+                    "absolute left-0 top-1 h-6 w-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm transition-all group-hover:scale-110",
+                    idx === 0 ? "bg-[#1C8AFF]" : "bg-slate-200"
+                  )}>
+                    <div className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      idx === 0 ? "bg-white animate-pulse" : "bg-white"
+                    )} />
+                  </div>
+                  <div>
+                    <h3 className={cn(
+                      "text-xs font-bold",
+                      idx === 0 ? "text-[#1C8AFF]" : "text-slate-700"
+                    )}>{entry.title}</h3>
+                    {entry.description && (
+                      <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{entry.description}</p>
+                    )}
+                    <p className="text-[9px] text-slate-400 mt-1 font-medium">{new Date(entry.createdAt).toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+
+              {/* Core Status: If Completed */}
+              {booking?.status === "completed" && (
+                <div className="relative pl-10">
+                  <div className="absolute left-0 top-1 h-6 w-6 rounded-full bg-blue-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
+                    <Check className="h-3 w-3 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-blue-700">Service Completed</h3>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{booking.completedAt ? new Date(booking.completedAt).toLocaleString() : ""}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-4">
+            <button
+              onClick={() => setIsStatusOpen(true)}
+              className="w-full py-3 px-4 bg-[#1C8AFF] text-white rounded-xl text-xs font-bold shadow-md shadow-blue-100 hover:bg-[#1C8AFF]/90 transition-all flex items-center justify-center gap-2 group"
+            >
+              Post New Update
+              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Info Section */}
+        <div className="p-6 bg-slate-50 border-t border-slate-100">
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Service Details</h3>
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-400">
+                <Monitor className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-slate-700 line-clamp-1">{booking?.service?.name || booking?.bookAnExpert?.name}</p>
+                <p className="text-[9px] text-slate-500">Service Module</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Select Status Dialog */}
       <Dialog open={isStatusOpen} onOpenChange={setIsStatusOpen}>

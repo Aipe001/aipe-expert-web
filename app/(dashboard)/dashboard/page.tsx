@@ -63,6 +63,7 @@ export default function DashboardPage() {
   const { isAuthenticated, user } = useSelector(
     (state: RootState) => state.auth,
   );
+  const { needsRefetch } = useSelector((state: RootState) => state.notifications);
 
   const [stats, setStats] = useState<EarningsStats | null>(null);
   const [requests, setRequests] = useState<BookingRequest[]>([]);
@@ -77,15 +78,19 @@ export default function DashboardPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [statsRes, reqRes, bookRes] = await Promise.allSettled([
+      const [statsRes, reqRes, bookRes, profileRes] = await Promise.allSettled([
         expertApi.getEarningsStats(),
         getExpertBookingRequests(),
         getExpertBookings(),
+        expertApi.getMyProfile(),
       ]);
 
       if (statsRes.status === "fulfilled") setStats(statsRes.value);
       if (reqRes.status === "fulfilled") setRequests(reqRes.value);
       if (bookRes.status === "fulfilled") setBookings(bookRes.value);
+      if (profileRes.status === "fulfilled" && profileRes.value) {
+        setIsOnline(profileRes.value.isActive || false);
+      }
     } catch (err) {
       console.error("Dashboard data fetch failed", err);
     } finally {
@@ -99,7 +104,21 @@ export default function DashboardPage() {
       return;
     }
     fetchData();
+
+    // Start polling for new orders and stats every 10 seconds
+    const interval = setInterval(() => {
+      fetchData();
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, [isAuthenticated, router, fetchData]);
+
+  // Refetch when triggered by NotificationManager
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchData();
+    }
+  }, [needsRefetch, isAuthenticated, fetchData]);
 
   const pendingRequests = requests.filter(
     (r) => r.status.toLowerCase() === "pending",

@@ -319,15 +319,29 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
     }
   };
 
-  const getStatusSteps = (status: string) => {
-    // These match the logic in bookings/page.tsx
-    const isCompleted = status === "completed" || status === "Service Completed";
-    const isActive = status === "active" || status === "Document Under Review" || isCompleted;
-    
+  const normalizeStatus = (value?: string) => (value || "").toLowerCase().replace(/_/g, " ").trim();
+
+  const getStatusSteps = (status: string, timelineTitles: string[] = []) => {
+    const normalizedStatus = normalizeStatus(status);
+    const timelineSet = new Set(timelineTitles.map((title) => normalizeStatus(title)));
+    const hasTimelineStatus = (title: string) => timelineSet.has(normalizeStatus(title));
+
+    const isDocumentRequested = hasTimelineStatus("Document Requested") || normalizedStatus !== "pending payment";
+    const isDocumentReceived =
+      hasTimelineStatus("Document Received") ||
+      hasTimelineStatus("Document Under Review") ||
+      normalizedStatus === "active" ||
+      normalizedStatus === "completed";
+    const isUnderReview =
+      hasTimelineStatus("Document Under Review") ||
+      normalizedStatus === "active" ||
+      normalizedStatus === "completed";
+    const isCompleted = normalizedStatus === "completed" || hasTimelineStatus("Service Completed");
+
     return [
-      { label: "Doc Requested", completed: true },
-      { label: "Doc Received", completed: status !== "pending_payment" },
-      { label: "Under Review", completed: isActive },
+      { label: "Document Requested", completed: isDocumentRequested },
+      { label: "Document Received", completed: isDocumentReceived },
+      { label: "Under Review", completed: isUnderReview },
       { label: "Completed", completed: isCompleted },
     ];
   };
@@ -535,6 +549,10 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   const isInCall = !!(currentCall && currentCall.bookingId === bookingId && currentCall.status !== "idle");
   const isVideoCall = currentCall?.callType === "video";
   const isCallActive = currentCall?.status === "active";
+  const statusSteps = getStatusSteps(
+    booking?.status || "",
+    (booking?.timeline || []).map((entry: any) => entry.title)
+  );
 
   const handleBack = () => {
     router.push("/chat");
@@ -617,6 +635,53 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
             </div>
           </div>
         </div>
+
+      {/* Booking Progress */}
+      <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Status</p>
+            <h2 className="mt-1 text-sm font-semibold text-slate-800">Booking Timeline</h2>
+          </div>
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
+            Expert is Active
+          </span>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+          {statusSteps.map((step, index) => (
+            <div
+              key={step.label}
+              className={cn(
+                "rounded-xl border px-3 py-3 transition-colors",
+                step.completed
+                  ? "border-blue-200 bg-blue-50/70"
+                  : "border-slate-200 bg-slate-50"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-bold",
+                    step.completed
+                      ? "border-blue-500 bg-blue-500 text-white"
+                      : "border-slate-300 bg-white text-slate-500"
+                  )}
+                >
+                  {step.completed ? <Check className="h-3 w-3" /> : index + 1}
+                </span>
+                <span
+                  className={cn(
+                    "line-clamp-2 text-[11px] font-semibold",
+                    step.completed ? "text-blue-700" : "text-slate-600"
+                  )}
+                >
+                  {step.label}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
 
 
@@ -915,42 +980,44 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
       </div>
 
       {/* Right Sidebar - Status Timeline Tracking */}
-      <div className="w-80 hidden xl:flex flex-col bg-white border-l border-slate-200 overflow-hidden shrink-0">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-[#1C8AFF]/5">
+      <div className="w-80 hidden xl:flex flex-col border-l border-slate-200 bg-white/80 backdrop-blur-sm overflow-hidden shrink-0">
+        <div className="border-b border-slate-100 bg-gradient-to-r from-[#1C8AFF]/10 to-white p-6">
           <div>
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Tracking</h2>
-            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Live service updates</p>
+            <p className="mt-0.5 text-[10px] font-medium text-slate-500">Live service updates</p>
           </div>
-          <button 
+          <button
             onClick={() => setIsStatusOpen(true)}
-            className="p-2 hover:bg-[#1C8AFF]/10 rounded-full transition-colors text-[#1C8AFF]"
+            className="mt-4 w-full rounded-xl bg-[#1C8AFF] px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#1675de]"
           >
-            <ChevronRight className="h-5 w-5" />
+            Post New Update
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
           <div className="relative">
             {/* Timeline Line */}
-            <div className="absolute left-[11px] top-2 bottom-2 w-[2px] bg-slate-100" />
+            <div className="absolute left-[11px] top-2 bottom-2 w-[2px] bg-slate-200" />
             
-            <div className="space-y-8">
+            <div className="space-y-4">
               {/* Core Status: Created */}
-              <div className="relative pl-10">
-                <div className="absolute left-0 top-1 h-6 w-6 rounded-full bg-green-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
+              <div className="relative rounded-xl border border-slate-200 bg-white p-3 pl-10 shadow-sm">
+                <div className="absolute left-3 top-4 h-6 w-6 rounded-full bg-emerald-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
                   <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold text-slate-900">Booking Started</h3>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{booking ? new Date(booking.createdAt).toLocaleString() : ""}</p>
+                  <h3 className="text-xs font-semibold text-slate-900">Booking Started</h3>
+                  <p className="mt-1 text-[10px] font-medium text-slate-500">
+                    {booking ? new Date(booking.createdAt).toLocaleString() : ""}
+                  </p>
                 </div>
               </div>
 
               {/* Dynamic Timeline Entries */}
               {(booking?.timeline || []).slice().reverse().map((entry: any, idx: number) => (
-                <div key={entry.id} className="relative pl-10 group">
+                <div key={entry.id} className="group relative rounded-xl border border-slate-200 bg-white p-3 pl-10 shadow-sm transition-all hover:border-blue-200 hover:shadow">
                   <div className={cn(
-                    "absolute left-0 top-1 h-6 w-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm transition-all group-hover:scale-110",
+                    "absolute left-3 top-4 h-6 w-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm transition-all group-hover:scale-110",
                     idx === 0 ? "bg-[#1C8AFF]" : "bg-slate-200"
                   )}>
                     <div className={cn(
@@ -960,54 +1027,60 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                   </div>
                   <div>
                     <h3 className={cn(
-                      "text-xs font-bold",
+                      "text-xs font-semibold",
                       idx === 0 ? "text-[#1C8AFF]" : "text-slate-700"
                     )}>{entry.title}</h3>
                     {entry.description && (
-                      <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{entry.description}</p>
+                      <p className="mt-1 line-clamp-2 text-[10px] text-slate-500">{entry.description}</p>
                     )}
-                    <p className="text-[9px] text-slate-400 mt-1 font-medium">{new Date(entry.createdAt).toLocaleString()}</p>
+                    <p className="mt-2 text-[9px] font-medium text-slate-400">{new Date(entry.createdAt).toLocaleString()}</p>
                   </div>
                 </div>
               ))}
 
               {/* Core Status: If Completed */}
               {booking?.status === "completed" && (
-                <div className="relative pl-10">
-                  <div className="absolute left-0 top-1 h-6 w-6 rounded-full bg-blue-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
+                <div className="relative rounded-xl border border-blue-100 bg-blue-50 p-3 pl-10 shadow-sm">
+                  <div className="absolute left-3 top-4 h-6 w-6 rounded-full bg-blue-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
                     <Check className="h-3 w-3 text-blue-600" />
                   </div>
                   <div>
-                    <h3 className="text-xs font-bold text-blue-700">Service Completed</h3>
-                    <p className="text-[10px] text-slate-500 mt-0.5">{booking.completedAt ? new Date(booking.completedAt).toLocaleString() : ""}</p>
+                    <h3 className="text-xs font-semibold text-blue-700">Service Completed</h3>
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      {booking.completedAt ? new Date(booking.completedAt).toLocaleString() : ""}
+                    </p>
                   </div>
                 </div>
               )}
             </div>
           </div>
-
-          <div className="pt-4">
-            <button
-              onClick={() => setIsStatusOpen(true)}
-              className="w-full py-3 px-4 bg-[#1C8AFF] text-white rounded-xl text-xs font-bold shadow-md shadow-blue-100 hover:bg-[#1C8AFF]/90 transition-all flex items-center justify-center gap-2 group"
-            >
-              Post New Update
-              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-            </button>
-          </div>
         </div>
 
         {/* Quick Info Section */}
-        <div className="p-6 bg-slate-50 border-t border-slate-100">
-          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Service Details</h3>
-          <div className="space-y-4">
+        <div className="border-t border-slate-100 bg-slate-50 p-5">
+          <h3 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Service Details</h3>
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
             <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-400">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400">
                 <Monitor className="h-4 w-4" />
               </div>
-              <div>
-                <p className="text-[11px] font-bold text-slate-700 line-clamp-1">{booking?.service?.name || booking?.bookAnExpert?.name}</p>
+              <div className="min-w-0">
+                <p className="line-clamp-1 text-[11px] font-semibold text-slate-700">{booking?.service?.name || booking?.bookAnExpert?.name}</p>
                 <p className="text-[9px] text-slate-500">Service Module</p>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
+              <div>
+                <p className="text-[9px] uppercase tracking-wide text-slate-400">Date</p>
+                <p className="text-[11px] font-semibold text-slate-700">
+                  {booking ? new Date(booking.scheduledAt).toLocaleDateString("en-IN") : "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[9px] uppercase tracking-wide text-slate-400">Time</p>
+                <p className="text-[11px] font-semibold text-slate-700">
+                  {booking ? new Date(booking.scheduledAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                </p>
               </div>
             </div>
           </div>

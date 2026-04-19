@@ -55,7 +55,7 @@ export default function DashboardLayout({
         <Header />
         <Suspense fallback={
           <div className="flex-1 flex items-center justify-center min-h-[400px]">
-             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         }>
           <DashboardContent>{children}</DashboardContent>

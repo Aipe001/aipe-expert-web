@@ -46,7 +46,7 @@ export function BookingActiveModal() {
             <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent opacity-20 animate-pulse" />
             </div>
-            
+
             <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/20 shadow-xl relative z-10">
               <Play className="w-8 h-8 text-white fill-white ml-1" />
             </div>
@@ -75,20 +75,20 @@ export function BookingActiveModal() {
 
           {/* Actions Footer */}
           <div className="p-6 pt-2 flex gap-4 border-t border-slate-100 bg-white">
-            <Button 
-              onClick={dismiss} 
+            <Button
+              onClick={dismiss}
               variant="outline"
               className="flex-1 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 gap-2 h-12"
             >
               <X className="w-4 h-4" />
               Dismiss
             </Button>
-            <Button 
+            <Button
               onClick={handleJoin}
               className="flex-1 rounded-xl bg-[#1C8AFF] hover:bg-blue-700 text-white gap-2 h-12 border-blue-600 shadow-lg shadow-blue-500/20"
             >
               <Play className="w-4 h-4 fill-white" />
-              Join Chat
+              View Bookings
             </Button>
           </div>
         </motion.div>

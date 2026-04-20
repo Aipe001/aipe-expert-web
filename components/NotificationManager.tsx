@@ -41,7 +41,7 @@ export function NotificationManager() {
         console.log("[NotificationManager] Firebase messaging supported, requesting permission...");
         const permission = await Notification.requestPermission();
         console.log("[NotificationManager] Notification permission status:", permission);
-        
+
         if (permission === 'granted') {
           const fcmToken = await getToken(messaging, {
             vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY || "BOytKcvfv4dQb3jHJUkwjn0gw9IH888lGLI3Xzda1s9U86qqmyG4DJ77QVkFnC-tQE5VImxzXDeE4jzmOpUpmdg",
@@ -63,6 +63,18 @@ export function NotificationManager() {
 
         dispatch(fetchUnreadCount());
 
+        const playNotificationSound = () => {
+          try {
+            const audio = new Audio("/message.mp3");
+            audio.play().catch(err => {
+              // Browser might block audio if user hasn't interacted with the page
+              console.warn("[NotificationManager] Could not play notification sound:", err.message);
+            });
+          } catch (err) {
+            console.error("[NotificationManager] Error playing notification sound:", err);
+          }
+        };
+
         const handleMessage = (payload: any) => {
           const metadata = payload.data || {};
           let type = metadata.type || "general";
@@ -77,6 +89,17 @@ export function NotificationManager() {
             message: payload.notification?.body || (metadata as any).body || (metadata as any).message,
             data: metadata
           };
+
+          // Play sound for all notifications except calls
+          const isCallRelated = data.type === "incoming_call" ||
+            data.type === "call_ended" ||
+            data.type === "call_cancelled" ||
+            data.type === "call_rejected" ||
+            data.type === "call_missed";
+
+          if (!isCallRelated) {
+            playNotificationSound();
+          }
 
           // Use metadata directly for dynamic property searching to avoid TS errors
           const m = metadata as any;
@@ -148,7 +171,7 @@ export function NotificationManager() {
             isRead: false,
             createdAt: new Date().toISOString()
           } as any));
-          
+
           // Trigger refetch for any booking-related events
           if (data.type === "booking_request" || data.type === "booking_active" || data.type === "booking_accepted" || data.type === "booking_completed") {
             dispatch(triggerRefetch());

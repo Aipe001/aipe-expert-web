@@ -285,8 +285,8 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
             return unique.length > 0 ? [...prev, ...unique] : prev;
           });
         }
-        
-        agoraApi.getParticipantStatus(bookingId).then(setParticipantStatus).catch(() => {});
+
+        agoraApi.getParticipantStatus(bookingId).then(setParticipantStatus).catch(() => { });
       } catch {
         // Silently handle
       }
@@ -448,7 +448,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
       callerAudioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
     const ctx = callerAudioCtxRef.current;
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    if (ctx.state === 'suspended') ctx.resume().catch(() => { });
 
     const playTone = () => {
       if (!callerAudioCtxRef.current) return;
@@ -477,7 +477,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
       callerRingRef.current = null;
     }
     if (callerAudioCtxRef.current?.state === 'running') {
-      callerAudioCtxRef.current.close().catch(() => {});
+      callerAudioCtxRef.current.close().catch(() => { });
       callerAudioCtxRef.current = null;
     }
   };
@@ -670,116 +670,485 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
 
   return (
     <div className="flex flex-col flex-1 h-full bg-[#F4F7F9] overflow-hidden min-h-0">
-    <div className="flex flex-1 min-h-0 bg-[#F8FAFC]">
-      {/* Left Chat Main Area */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 border-r border-slate-200">
-        {/* Header */}
-        <div className="h-16 flex items-center justify-between px-6 bg-white border-b border-slate-100 shrink-0">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleBack}
-              className="p-2 hover:bg-slate-50 rounded-full transition-colors lg:hidden"
-            >
-              <ChevronLeft className="h-5 w-5 text-slate-600" />
-            </button>
-            <div className="relative h-10 w-10 rounded-full bg-[#1C8AFF] flex items-center justify-center text-white font-bold">
-              {getParticipantName() ? getParticipantName()[0] : "C"}
-              <div className={cn(
-                "absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white",
-                participantStatus?.isOnline ? "bg-green-500" : "bg-slate-300"
-              )}></div>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm font-bold text-slate-900 line-clamp-1">{getParticipantName()}</h1>
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-700 hidden sm:block">
-                  online
-                </span>
+      <div className="flex flex-1 min-h-0 bg-[#F8FAFC]">
+        {/* Left Chat Main Area */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 border-r border-slate-200">
+          {/* Header */}
+          <div className="h-16 flex items-center justify-between px-6 bg-white border-b border-slate-100 shrink-0">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleBack}
+                className="p-2 hover:bg-slate-50 rounded-full transition-colors lg:hidden"
+              >
+                <ChevronLeft className="h-5 w-5 text-slate-600" />
+              </button>
+              <div className="relative h-10 w-10 rounded-full bg-[#1C8AFF] flex items-center justify-center text-white font-bold">
+                {getParticipantName() ? getParticipantName()[0] : "C"}
+                <div className={cn(
+                  "absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white",
+                  participantStatus?.isOnline ? "bg-green-500" : "bg-slate-300"
+                )}></div>
               </div>
-              <p className="text-[10px] text-slate-500 font-medium">#{booking?.bookingNumber}</p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-sm font-bold text-slate-900 line-clamp-1">{getParticipantName()}</h1>
+                </div>
+                <p className="text-[10px] text-slate-500 font-medium">#{booking?.bookingNumber}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold capitalize transition-colors",
+                booking?.status === "completed" ? "bg-blue-50 text-blue-600" :
+                  booking?.status === "active" || !booking?.status ? "bg-green-50 text-green-600" :
+                    "bg-amber-50 text-amber-600"
+              )}>
+                <span className={cn(
+                  "w-1.5 h-1.5 rounded-full shadow-sm",
+                  booking?.status === "completed" ? "bg-blue-600" :
+                    booking?.status === "active" || !booking?.status ? "bg-green-500" :
+                      "bg-amber-500 animate-pulse"
+                )}></span>
+                {booking?.status || "Active"}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => !isInCall && handleStartCall("audio")}
+                  disabled={isInCall}
+                  className={cn(
+                    "h-9 w-9 rounded-full flex items-center justify-center transition-all duration-300",
+                    "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-sm"
+                  )}
+                >
+                  <Phone className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => !isInCall && handleStartCall("video")}
+                  disabled={isInCall}
+                  className={cn(
+                    "h-9 w-9 rounded-full flex items-center justify-center transition-all duration-300",
+                    "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-sm"
+                  )}
+                >
+                  <Video className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
-          
-          <div className="flex items-center gap-4">
-            <div className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold capitalize transition-colors",
-              booking?.status === "completed" ? "bg-blue-50 text-blue-600" :
-              booking?.status === "active" || !booking?.status ? "bg-green-50 text-green-600" : 
-              "bg-amber-50 text-amber-600"
+
+          {/* Tab Switcher for Mobile/Tablet */}
+          <div className="flex xl:hidden border-b border-slate-200 bg-white shrink-0">
+            <button
+              onClick={() => setActiveTab("chat")}
+              className={cn(
+                "flex-1 py-3 text-[13px] font-bold border-b-2 text-center transition-colors",
+                activeTab === "chat" ? "border-[#1C8AFF] text-[#1C8AFF]" : "border-transparent text-slate-500 hover:text-slate-700"
+              )}
+            >
+              Chat
+            </button>
+            <button
+              onClick={() => setActiveTab("tracking")}
+              className={cn(
+                "flex-1 py-3 text-[13px] font-bold border-b-2 text-center transition-colors",
+                activeTab === "tracking" ? "border-[#1C8AFF] text-[#1C8AFF]" : "border-transparent text-slate-500 hover:text-slate-700"
+              )}
+            >
+              Tracking
+            </button>
+          </div>
+
+          {/* Mobile Tracking View */}
+          <div className={cn(
+            "flex-1 overflow-y-auto flex-col xl:hidden",
+            activeTab === "tracking" ? "flex" : "hidden"
+          )}>
+            <div className="p-6">
+              <button
+                onClick={() => setIsStatusOpen(true)}
+                className="w-full mb-6 rounded-xl bg-[#1C8AFF] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1675de]"
+              >
+                Post New Update
+              </button>
+
+              <div className="relative">
+                {/* Timeline Line */}
+                <div className="absolute left-[11px] top-2 bottom-2 w-[2px] bg-slate-200" />
+                <div className="space-y-4">
+                  <div className="relative rounded-xl border border-slate-200 bg-white p-3 pl-10 shadow-sm">
+                    <div className="absolute left-3 top-4 h-6 w-6 rounded-full bg-emerald-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
+                      <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-semibold text-slate-900">Booking Started</h3>
+                      <p className="mt-1 text-[10px] font-medium text-slate-500">
+                        {booking ? new Date(booking.createdAt).toLocaleString() : ""}
+                      </p>
+                    </div>
+                  </div>
+                  {booking?.timeline?.map((update: any, index: number) => (
+                    <div key={index} className="relative rounded-xl border border-slate-200 bg-white p-3 pl-10 shadow-sm">
+                      <div className="absolute left-3 top-4 h-6 w-6 rounded-full bg-slate-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
+                        <div className={cn(
+                          "h-1.5 w-1.5 rounded-full",
+                          index === (booking.timeline?.length || 0) - 1 ? "bg-amber-500" : "bg-slate-400"
+                        )} />
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-semibold text-slate-900">{update.status}</h3>
+                        <p className="mt-1 text-[10px] font-medium text-slate-500">
+                          {new Date(update.timestamp).toLocaleString()}
+                        </p>
+                        {update.notes && (
+                          <p className="mt-2 text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
+                            {update.notes}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Chat Main ContentWrapper */}
+          <div className={cn(
+            "flex-1 flex flex-col min-h-0 relative overflow-hidden",
+            activeTab === "chat" ? "flex" : "hidden xl:flex"
+          )}>
+
+
+
+            {/* Call Banner */}
+            <AnimatePresence>
+              {isInCall && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{
+                    height: (isVideoCall && isCallActive) ? "100%" : "auto",
+                    opacity: 1
+                  }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className={cn(
+                    "bg-slate-900 text-white overflow-hidden flex flex-col z-50",
+                    (isVideoCall && isCallActive) ? "absolute inset-0" : "shrink-0"
+                  )}
+                >
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <motion.div
+                        animate={
+                          currentCall?.status === "connecting" || currentCall?.status === "ringing"
+                            ? { scale: [1, 1.15, 1] }
+                            : {}
+                        }
+                        transition={{ repeat: Infinity, duration: 1.6 }}
+                        className={cn(
+                          "h-10 w-10 rounded-full flex items-center justify-center",
+                          isCallActive ? "bg-green-500" : "bg-amber-500"
+                        )}
+                      >
+                        {isVideoCall ? (
+                          <Video className="h-5 w-5 text-white" />
+                        ) : (
+                          <Phone className="h-5 w-5 text-white" />
+                        )}
+                      </motion.div>
+                      <div>
+                        <p className="font-bold text-sm">{getParticipantName()}</p>
+                        <p className="text-xs text-white/60">
+                          {currentCall?.status === "connecting" && `Connecting${isVideoCall ? " video" : ""}...`}
+                          {currentCall?.status === "ringing" && `Ringing${isVideoCall ? " (Video)" : ""}...`}
+                          {currentCall?.status === "active" && `${isVideoCall ? "📹 " : ""}${formatCallDuration(callDuration)}`}
+                          {currentCall?.status === "ended" && "Call ended"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {isCallActive && (
+                        <>
+                          {isVideoCall && (
+                            <>
+                              <button
+                                onClick={flipCamera}
+                                className="h-9 w-9 rounded-full flex items-center justify-center bg-white/20 hover:bg-white/30 transition-colors"
+                                title="Flip Camera"
+                              >
+                                <RefreshCcw className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => dispatch(toggleVideo())}
+                                className={cn(
+                                  "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
+                                  !currentCall?.isVideoEnabled ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
+                                )}
+                              >
+                                {currentCall?.isVideoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                              </button>
+                              <button
+                                onClick={() => dispatch(toggleScreenSharing())}
+                                className={cn(
+                                  "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
+                                  currentCall?.isScreenSharing ? "bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.6)]" : "bg-white/20 hover:bg-white/30"
+                                )}
+                                title={currentCall?.isScreenSharing ? "Stop Sharing" : "Share Screen"}
+                              >
+                                {currentCall?.isScreenSharing ? <MonitorOff className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={toggleSpeakerMute}
+                            className={cn(
+                              "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
+                              isSpeakerMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
+                            )}
+                          >
+                            {isSpeakerMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                          </button>
+                          <button
+                            onClick={() => dispatch(toggleMute())}
+                            className={cn(
+                              "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
+                              currentCall?.isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
+                            )}
+                          >
+                            {currentCall?.isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={handleEndCall}
+                        className="h-9 w-9 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors"
+                      >
+                        <PhoneOff className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Video area during active video call */}
+                  {isVideoCall && isCallActive && (
+                    <div className="relative w-full h-full flex-1 bg-black overflow-hidden flex flex-col items-center justify-center">
+                      {/* Remote video */}
+                      <div ref={remoteVideoRef} className="absolute inset-0 w-full h-full object-cover">
+                        {currentCall?.remoteUid === null && (
+                          <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center text-white/30 backdrop-blur-sm">
+                            <Video className="h-12 w-12 mb-2 animate-pulse" />
+                            <p className="text-sm font-medium">Waiting for video...</p>
+                          </div>
+                        )}
+                      </div>
+                      {/* Local video (PIP) */}
+                      {(currentCall?.isVideoEnabled || currentCall?.isScreenSharing) && (
+                        <div className="absolute bottom-6 right-6 w-28 h-40 md:w-40 md:h-56 rounded-2xl overflow-hidden border-2 border-white/50 shadow-2xl bg-slate-800 z-10 transition-all hover:scale-105">
+                          {currentCall?.isScreenSharing && (
+                            <div className="absolute inset-0 z-10 bg-blue-600/30 flex items-center justify-center backdrop-blur-[2px]">
+                              <Monitor className="h-6 w-6 text-white animate-pulse" />
+                            </div>
+                          )}
+                          <div ref={localVideoRef} className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Message Area */}
+            {!isCallActive || !isVideoCall ? (
+              <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3">
+                {messages.map((msg) => (
+                  <motion.div
+                    key={msg.id}
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    className={cn(
+                      "max-w-[85%] md:max-w-[70%]",
+                      isMyMessage(msg) ? "ml-auto" : "mr-auto"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "p-3 rounded-2xl text-sm shadow-sm",
+                        isMyMessage(msg)
+                          ? "bg-[#1C8AFF] text-white rounded-tr-none"
+                          : "bg-white text-slate-700 rounded-tl-none border border-slate-100"
+                      )}
+                    >
+                      {/* Image attachment */}
+                      {msg.messageType === 'image' && msg.fileUrl ? (
+                        <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" className="block">
+                          <img
+                            src={msg.fileUrl}
+                            alt={msg.fileName || 'Image'}
+                            className="max-w-[240px] max-h-[180px] rounded-lg object-cover mb-1 cursor-pointer hover:opacity-90 transition-opacity"
+                          />
+                          <p className={cn(
+                            "text-xs truncate mt-1",
+                            isMyMessage(msg) ? "text-blue-100" : "text-slate-400"
+                          )}>{msg.fileName || 'Image'}</p>
+                        </a>
+                      ) : msg.messageType === 'document' && msg.fileUrl ? (
+                        /* Document attachment card */
+                        <a
+                          href={msg.fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={cn(
+                            "flex items-center gap-3 p-2.5 rounded-xl transition-colors",
+                            isMyMessage(msg)
+                              ? "bg-white/15 hover:bg-white/25"
+                              : "bg-slate-50 hover:bg-slate-100 border border-slate-100"
+                          )}
+                        >
+                          <div className={cn(
+                            "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
+                            isMyMessage(msg) ? "bg-white/20" : "bg-indigo-50"
+                          )}>
+                            <FileText className={cn(
+                              "h-5 w-5",
+                              isMyMessage(msg) ? "text-white" : "text-indigo-500"
+                            )} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={cn(
+                              "text-sm font-medium truncate",
+                              isMyMessage(msg) ? "text-white" : "text-slate-800"
+                            )}>{msg.fileName || 'File'}</p>
+                            {msg.fileSize && (
+                              <p className={cn(
+                                "text-[10px]",
+                                isMyMessage(msg) ? "text-blue-200" : "text-slate-400"
+                              )}>{formatFileSize(msg.fileSize)}</p>
+                            )}
+                          </div>
+                          <Download className={cn(
+                            "h-4 w-4 shrink-0",
+                            isMyMessage(msg) ? "text-white/70" : "text-indigo-400"
+                          )} />
+                        </a>
+                      ) : (
+                        /* Normal text message */
+                        <>{msg.content}</>
+                      )}
+                      <div className={cn(
+                        "flex flex-row items-center justify-end gap-1 mt-1 -mb-1",
+                        isMyMessage(msg) ? "text-blue-100" : "text-slate-400"
+                      )}>
+                        <div className="text-[10px] font-medium text-right">
+                          {formatTime(msg.createdAt)}
+                        </div>
+                        {isMyMessage(msg) && (
+                          msg.isRead ?
+                            <CheckCheck className="w-3.5 h-3.5 text-blue-200" /> :
+                            <Check className="w-3.5 h-3.5 text-blue-200/70" />
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+
+                {messages.length === 0 && (
+                  <div className="pt-4 flex flex-col items-center justify-center text-center opacity-40 h-full">
+                    <div className="h-10 w-10 rounded-full bg-slate-200/50 flex items-center justify-center mb-2">
+                      <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                    </div>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Start the conversation</p>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+            ) : null}
+
+            {/* Message Input Footer */}
+            <footer className={cn(
+              "p-4 shrink-0 transition-colors",
+              isCallActive && isVideoCall ? "bg-slate-900 border-t border-white/10" : "bg-transparent"
             )}>
-              <span className={cn(
-                "w-1.5 h-1.5 rounded-full shadow-sm",
-                booking?.status === "completed" ? "bg-blue-600" :
-                booking?.status === "active" || !booking?.status ? "bg-green-500" : 
-                "bg-amber-500 animate-pulse"
-              )}></span>
-              {booking?.status || "Active"}
-            </div>
+              <div className="max-w-4xl mx-auto flex items-center gap-3">
+                <div className="flex-1 bg-white rounded-full border border-slate-200 shadow-sm flex items-center px-4 py-1 h-12 group focus-within:shadow-[0_0_20px_rgba(28,138,255,0.3)] focus-within:border-[#1C8AFF]/30 transition-all duration-300">
+                  <Input
+                    placeholder="Message..."
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    className="border-none shadow-none focus-visible:ring-0 bg-transparent text-slate-700 placeholder:text-slate-400 h-10 px-0"
+                  />
+                  <div className="flex items-center gap-3 text-slate-400 pl-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                    {isUploading ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-[#1C8AFF]" />
+                    ) : (
+                      <Paperclip
+                        className="h-5 w-5 cursor-pointer hover:text-[#1C8AFF] transition-colors"
+                        onClick={() => fileInputRef.current?.click()}
+                      />
+                    )}
+                    <Camera className="h-5 w-5 cursor-pointer hover:text-[#1C8AFF] transition-colors" />
+                  </div>
+                </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => !isInCall && handleStartCall("audio")}
-                disabled={isInCall}
-                className={cn(
-                  "h-9 w-9 rounded-full flex items-center justify-center transition-all duration-300",
-                  "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-sm"
+                {inputText.trim() ? (
+                  <button
+                    onClick={handleSend}
+                    disabled={sending}
+                    className="h-12 w-12 rounded-full bg-[#1C8AFF] flex items-center justify-center cursor-pointer hover:bg-[#1C8AFF]/90 transition-colors shrink-0"
+                  >
+                    {sending ? (
+                      <Loader2 className="h-5 w-5 text-white animate-spin" />
+                    ) : (
+                      <Send className="h-5 w-5 text-white" />
+                    )}
+                  </button>
+                ) : (
+                  <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center cursor-pointer hover:bg-slate-300 transition-colors shrink-0">
+                    <Mic className="h-6 w-6 text-slate-600" />
+                  </div>
                 )}
-              >
-                <Phone className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => !isInCall && handleStartCall("video")}
-                disabled={isInCall}
-                className={cn(
-                  "h-9 w-9 rounded-full flex items-center justify-center transition-all duration-300",
-                  "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-sm"
-                )}
-              >
-                <Video className="h-4 w-4" />
-              </button>
-            </div>
+              </div>
+            </footer>
           </div>
         </div>
 
-        {/* Tab Switcher for Mobile/Tablet */}
-        <div className="flex xl:hidden border-b border-slate-200 bg-white shrink-0">
-          <button
-            onClick={() => setActiveTab("chat")}
-            className={cn(
-              "flex-1 py-3 text-[13px] font-bold border-b-2 text-center transition-colors",
-              activeTab === "chat" ? "border-[#1C8AFF] text-[#1C8AFF]" : "border-transparent text-slate-500 hover:text-slate-700"
-            )}
-          >
-            Chat
-          </button>
-          <button
-            onClick={() => setActiveTab("tracking")}
-            className={cn(
-              "flex-1 py-3 text-[13px] font-bold border-b-2 text-center transition-colors",
-              activeTab === "tracking" ? "border-[#1C8AFF] text-[#1C8AFF]" : "border-transparent text-slate-500 hover:text-slate-700"
-            )}
-          >
-            Tracking
-          </button>
-        </div>
-
-        {/* Mobile Tracking View */}
-        <div className={cn(
-          "flex-1 overflow-y-auto flex-col xl:hidden",
-          activeTab === "tracking" ? "flex" : "hidden"
-        )}>
-          <div className="p-6">
+        {/* Right Sidebar - Status Timeline Tracking */}
+        <div className="w-80 hidden xl:flex flex-col border-l border-slate-200 bg-white/80 backdrop-blur-sm overflow-hidden shrink-0 h-full">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-[#1C8AFF]/10 to-white p-6 shrink-0">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Tracking</h2>
+              <p className="mt-0.5 text-[10px] font-medium text-slate-500">Live service updates</p>
+            </div>
             <button
               onClick={() => setIsStatusOpen(true)}
-              className="w-full mb-6 rounded-xl bg-[#1C8AFF] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1675de]"
+              className="mt-4 w-full rounded-xl bg-[#1C8AFF] px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#1675de]"
             >
               Post New Update
             </button>
-            
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-5">
             <div className="relative">
               {/* Timeline Line */}
               <div className="absolute left-[11px] top-2 bottom-2 w-[2px] bg-slate-200" />
+
               <div className="space-y-4">
+                {/* Core Status: Created */}
                 <div className="relative rounded-xl border border-slate-200 bg-white p-3 pl-10 shadow-sm">
                   <div className="absolute left-3 top-4 h-6 w-6 rounded-full bg-emerald-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
                     <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
@@ -791,486 +1160,114 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                     </p>
                   </div>
                 </div>
-                {booking?.timeline?.map((update: any, index: number) => (
-                  <div key={index} className="relative rounded-xl border border-slate-200 bg-white p-3 pl-10 shadow-sm">
-                    <div className="absolute left-3 top-4 h-6 w-6 rounded-full bg-slate-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
+
+                {/* Dynamic Timeline Entries */}
+                {(booking?.timeline || []).slice().reverse().map((entry: any, idx: number) => (
+                  <div key={entry.id} className="group relative rounded-xl border border-slate-200 bg-white p-3 pl-10 shadow-sm transition-all hover:border-blue-200 hover:shadow">
+                    <div className={cn(
+                      "absolute left-3 top-4 h-6 w-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm transition-all group-hover:scale-110",
+                      idx === 0 ? "bg-[#1C8AFF]" : "bg-slate-200"
+                    )}>
                       <div className={cn(
                         "h-1.5 w-1.5 rounded-full",
-                        index === (booking.timeline?.length || 0) - 1 ? "bg-amber-500" : "bg-slate-400"
+                        idx === 0 ? "bg-white animate-pulse" : "bg-white"
                       )} />
                     </div>
                     <div>
-                      <h3 className="text-xs font-semibold text-slate-900">{update.status}</h3>
-                      <p className="mt-1 text-[10px] font-medium text-slate-500">
-                        {new Date(update.timestamp).toLocaleString()}
-                      </p>
-                      {update.notes && (
-                        <p className="mt-2 text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
-                          {update.notes}
-                        </p>
+                      <h3 className={cn(
+                        "text-xs font-semibold",
+                        idx === 0 ? "text-[#1C8AFF]" : "text-slate-700"
+                      )}>{entry.title}</h3>
+                      {entry.description && (
+                        <p className="mt-1 line-clamp-2 text-[10px] text-slate-500">{entry.description}</p>
                       )}
+                      <p className="mt-2 text-[9px] font-medium text-slate-400">{new Date(entry.createdAt).toLocaleString()}</p>
                     </div>
                   </div>
                 ))}
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Chat Main ContentWrapper */}
-        <div className={cn(
-          "flex-1 flex flex-col min-h-0 relative overflow-hidden",
-          activeTab === "chat" ? "flex" : "hidden xl:flex"
-        )}>
-          
-
-
-      {/* Call Banner */}
-      <AnimatePresence>
-        {isInCall && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ 
-              height: (isVideoCall && isCallActive) ? "100%" : "auto",
-              opacity: 1 
-            }}
-            exit={{ height: 0, opacity: 0 }}
-            className={cn(
-              "bg-slate-900 text-white overflow-hidden flex flex-col z-50",
-              (isVideoCall && isCallActive) ? "absolute inset-0" : "shrink-0"
-            )}
-          >
-            <div className="px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <motion.div
-                  animate={
-                    currentCall?.status === "connecting" || currentCall?.status === "ringing"
-                      ? { scale: [1, 1.15, 1] }
-                      : {}
-                  }
-                  transition={{ repeat: Infinity, duration: 1.6 }}
-                  className={cn(
-                    "h-10 w-10 rounded-full flex items-center justify-center",
-                    isCallActive ? "bg-green-500" : "bg-amber-500"
-                  )}
-                >
-                  {isVideoCall ? (
-                    <Video className="h-5 w-5 text-white" />
-                  ) : (
-                    <Phone className="h-5 w-5 text-white" />
-                  )}
-                </motion.div>
-                <div>
-                  <p className="font-bold text-sm">{getParticipantName()}</p>
-                  <p className="text-xs text-white/60">
-                    {currentCall?.status === "connecting" && `Connecting${isVideoCall ? " video" : ""}...`}
-                    {currentCall?.status === "ringing" && `Ringing${isVideoCall ? " (Video)" : ""}...`}
-                    {currentCall?.status === "active" && `${isVideoCall ? "📹 " : ""}${formatCallDuration(callDuration)}`}
-                    {currentCall?.status === "ended" && "Call ended"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {isCallActive && (
-                  <>
-                    {isVideoCall && (
-                      <>
-                        <button
-                          onClick={flipCamera}
-                          className="h-9 w-9 rounded-full flex items-center justify-center bg-white/20 hover:bg-white/30 transition-colors"
-                          title="Flip Camera"
-                        >
-                          <RefreshCcw className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => dispatch(toggleVideo())}
-                          className={cn(
-                            "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
-                            !currentCall?.isVideoEnabled ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
-                          )}
-                        >
-                          {currentCall?.isVideoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
-                        </button>
-                        <button
-                          onClick={() => dispatch(toggleScreenSharing())}
-                          className={cn(
-                            "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
-                            currentCall?.isScreenSharing ? "bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.6)]" : "bg-white/20 hover:bg-white/30"
-                          )}
-                          title={currentCall?.isScreenSharing ? "Stop Sharing" : "Share Screen"}
-                        >
-                          {currentCall?.isScreenSharing ? <MonitorOff className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
-                        </button>
-                      </>
-                    )}
-                    <button
-                      onClick={toggleSpeakerMute}
-                      className={cn(
-                        "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
-                        isSpeakerMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
-                      )}
-                    >
-                      {isSpeakerMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                    </button>
-                    <button
-                      onClick={() => dispatch(toggleMute())}
-                      className={cn(
-                        "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
-                        currentCall?.isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
-                      )}
-                    >
-                      {currentCall?.isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={handleEndCall}
-                  className="h-9 w-9 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors"
-                >
-                  <PhoneOff className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Video area during active video call */}
-            {isVideoCall && isCallActive && (
-              <div className="relative w-full h-full flex-1 bg-black overflow-hidden flex flex-col items-center justify-center">
-                {/* Remote video */}
-                <div ref={remoteVideoRef} className="absolute inset-0 w-full h-full object-cover">
-                  {currentCall?.remoteUid === null && (
-                    <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center text-white/30 backdrop-blur-sm">
-                      <Video className="h-12 w-12 mb-2 animate-pulse" />
-                      <p className="text-sm font-medium">Waiting for video...</p>
+                {/* Core Status: If Completed */}
+                {booking?.status === "completed" && (
+                  <div className="relative rounded-xl border border-blue-100 bg-blue-50 p-3 pl-10 shadow-sm">
+                    <div className="absolute left-3 top-4 h-6 w-6 rounded-full bg-blue-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
+                      <Check className="h-3 w-3 text-blue-600" />
                     </div>
-                  )}
-                </div>
-                {/* Local video (PIP) */}
-                {(currentCall?.isVideoEnabled || currentCall?.isScreenSharing) && (
-                  <div className="absolute bottom-6 right-6 w-28 h-40 md:w-40 md:h-56 rounded-2xl overflow-hidden border-2 border-white/50 shadow-2xl bg-slate-800 z-10 transition-all hover:scale-105">
-                    {currentCall?.isScreenSharing && (
-                      <div className="absolute inset-0 z-10 bg-blue-600/30 flex items-center justify-center backdrop-blur-[2px]">
-                        <Monitor className="h-6 w-6 text-white animate-pulse" />
-                      </div>
-                    )}
-                    <div ref={localVideoRef} className="w-full h-full object-cover" />
+                    <div>
+                      <h3 className="text-xs font-semibold text-blue-700">Service Completed</h3>
+                      <p className="mt-1 text-[10px] text-slate-500">
+                        {booking.completedAt ? new Date(booking.completedAt).toLocaleString() : ""}
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </div>
+          </div>
 
-      {/* Message Area */}
-      {!isCallActive || !isVideoCall ? (
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3">
-          {messages.map((msg) => (
-            <motion.div
-            key={msg.id}
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className={cn(
-              "max-w-[85%] md:max-w-[70%]",
-              isMyMessage(msg) ? "ml-auto" : "mr-auto"
-            )}
-          >
-            <div
-              className={cn(
-                "p-3 rounded-2xl text-sm shadow-sm",
-                isMyMessage(msg)
-                  ? "bg-[#1C8AFF] text-white rounded-tr-none"
-                  : "bg-white text-slate-700 rounded-tl-none border border-slate-100"
-              )}
-            >
-              {/* Image attachment */}
-              {msg.messageType === 'image' && msg.fileUrl ? (
-                <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" className="block">
-                  <img
-                    src={msg.fileUrl}
-                    alt={msg.fileName || 'Image'}
-                    className="max-w-[240px] max-h-[180px] rounded-lg object-cover mb-1 cursor-pointer hover:opacity-90 transition-opacity"
-                  />
-                  <p className={cn(
-                    "text-xs truncate mt-1",
-                    isMyMessage(msg) ? "text-blue-100" : "text-slate-400"
-                  )}>{msg.fileName || 'Image'}</p>
-                </a>
-              ) : msg.messageType === 'document' && msg.fileUrl ? (
-                /* Document attachment card */
-                <a
-                  href={msg.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "flex items-center gap-3 p-2.5 rounded-xl transition-colors",
-                    isMyMessage(msg)
-                      ? "bg-white/15 hover:bg-white/25"
-                      : "bg-slate-50 hover:bg-slate-100 border border-slate-100"
-                  )}
-                >
-                  <div className={cn(
-                    "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
-                    isMyMessage(msg) ? "bg-white/20" : "bg-indigo-50"
-                  )}>
-                    <FileText className={cn(
-                      "h-5 w-5",
-                      isMyMessage(msg) ? "text-white" : "text-indigo-500"
-                    )} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={cn(
-                      "text-sm font-medium truncate",
-                      isMyMessage(msg) ? "text-white" : "text-slate-800"
-                    )}>{msg.fileName || 'File'}</p>
-                    {msg.fileSize && (
-                      <p className={cn(
-                        "text-[10px]",
-                        isMyMessage(msg) ? "text-blue-200" : "text-slate-400"
-                      )}>{formatFileSize(msg.fileSize)}</p>
-                    )}
-                  </div>
-                  <Download className={cn(
-                    "h-4 w-4 shrink-0",
-                    isMyMessage(msg) ? "text-white/70" : "text-indigo-400"
-                  )} />
-                </a>
-              ) : (
-                /* Normal text message */
-                <>{msg.content}</>
-              )}
-              <div className={cn(
-                "flex flex-row items-center justify-end gap-1 mt-1 -mb-1",
-                isMyMessage(msg) ? "text-blue-100" : "text-slate-400"
-              )}>
-                <div className="text-[10px] font-medium text-right">
-                  {formatTime(msg.createdAt)}
+          {/* Quick Info Section */}
+          <div className="border-t border-slate-100 bg-slate-50 p-5 shrink-0">
+            <h3 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Service Details</h3>
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400">
+                  <Monitor className="h-4 w-4" />
                 </div>
-                {isMyMessage(msg) && (
-                  msg.isRead ? 
-                    <CheckCheck className="w-3.5 h-3.5 text-blue-200" /> : 
-                    <Check className="w-3.5 h-3.5 text-blue-200/70" />
-                )}
+                <div className="min-w-0">
+                  <p className="line-clamp-1 text-[11px] font-semibold text-slate-700">{booking?.service?.name || booking?.bookAnExpert?.name}</p>
+                  <p className="text-[9px] text-slate-500">Service Module</p>
+                </div>
               </div>
-            </div>
-          </motion.div>
-        ))}
-
-        {messages.length === 0 && (
-          <div className="pt-4 flex flex-col items-center justify-center text-center opacity-40 h-full">
-            <div className="h-10 w-10 rounded-full bg-slate-200/50 flex items-center justify-center mb-2">
-              <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-            </div>
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Start the conversation</p>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-      ) : null}
-
-      {/* Message Input Footer */}
-      <footer className={cn(
-        "p-4 shrink-0 transition-colors",
-        isCallActive && isVideoCall ? "bg-slate-900 border-t border-white/10" : "bg-transparent"
-      )}>
-        <div className="max-w-4xl mx-auto flex items-center gap-3">
-          <div className="flex-1 bg-white rounded-full border border-slate-200 shadow-sm flex items-center px-4 py-1 h-12 group focus-within:shadow-[0_0_20px_rgba(28,138,255,0.3)] focus-within:border-[#1C8AFF]/30 transition-all duration-300">
-            <Input
-              placeholder="Message..."
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              className="border-none shadow-none focus-visible:ring-0 bg-transparent text-slate-700 placeholder:text-slate-400 h-10 px-0"
-            />
-            <div className="flex items-center gap-3 text-slate-400 pl-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              {isUploading ? (
-                <Loader2 className="h-5 w-5 animate-spin text-[#1C8AFF]" />
-              ) : (
-                <Paperclip
-                  className="h-5 w-5 cursor-pointer hover:text-[#1C8AFF] transition-colors"
-                  onClick={() => fileInputRef.current?.click()}
-                />
-              )}
-              <Camera className="h-5 w-5 cursor-pointer hover:text-[#1C8AFF] transition-colors" />
-            </div>
-          </div>
-
-          {inputText.trim() ? (
-            <button
-              onClick={handleSend}
-              disabled={sending}
-              className="h-12 w-12 rounded-full bg-[#1C8AFF] flex items-center justify-center cursor-pointer hover:bg-[#1C8AFF]/90 transition-colors shrink-0"
-            >
-              {sending ? (
-                <Loader2 className="h-5 w-5 text-white animate-spin" />
-              ) : (
-                <Send className="h-5 w-5 text-white" />
-              )}
-            </button>
-          ) : (
-            <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center cursor-pointer hover:bg-slate-300 transition-colors shrink-0">
-              <Mic className="h-6 w-6 text-slate-600" />
-            </div>
-          )}
-        </div>
-      </footer>
-        </div>
-      </div>
-
-      {/* Right Sidebar - Status Timeline Tracking */}
-      <div className="w-80 hidden xl:flex flex-col border-l border-slate-200 bg-white/80 backdrop-blur-sm overflow-hidden shrink-0 h-full">
-        <div className="border-b border-slate-100 bg-gradient-to-r from-[#1C8AFF]/10 to-white p-6 shrink-0">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Tracking</h2>
-            <p className="mt-0.5 text-[10px] font-medium text-slate-500">Live service updates</p>
-          </div>
-          <button
-            onClick={() => setIsStatusOpen(true)}
-            className="mt-4 w-full rounded-xl bg-[#1C8AFF] px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#1675de]"
-          >
-            Post New Update
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          <div className="relative">
-            {/* Timeline Line */}
-            <div className="absolute left-[11px] top-2 bottom-2 w-[2px] bg-slate-200" />
-            
-            <div className="space-y-4">
-              {/* Core Status: Created */}
-              <div className="relative rounded-xl border border-slate-200 bg-white p-3 pl-10 shadow-sm">
-                <div className="absolute left-3 top-4 h-6 w-6 rounded-full bg-emerald-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
-                  <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
+                <div>
+                  <p className="text-[9px] uppercase tracking-wide text-slate-400">Date</p>
+                  <p className="text-[11px] font-semibold text-slate-700">
+                    {booking ? new Date(booking.scheduledAt).toLocaleDateString("en-IN") : "-"}
+                  </p>
                 </div>
                 <div>
-                  <h3 className="text-xs font-semibold text-slate-900">Booking Started</h3>
-                  <p className="mt-1 text-[10px] font-medium text-slate-500">
-                    {booking ? new Date(booking.createdAt).toLocaleString() : ""}
+                  <p className="text-[9px] uppercase tracking-wide text-slate-400">Time</p>
+                  <p className="text-[11px] font-semibold text-slate-700">
+                    {booking ? new Date(booking.scheduledAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "-"}
                   </p>
                 </div>
               </div>
-
-              {/* Dynamic Timeline Entries */}
-              {(booking?.timeline || []).slice().reverse().map((entry: any, idx: number) => (
-                <div key={entry.id} className="group relative rounded-xl border border-slate-200 bg-white p-3 pl-10 shadow-sm transition-all hover:border-blue-200 hover:shadow">
-                  <div className={cn(
-                    "absolute left-3 top-4 h-6 w-6 rounded-full border-4 border-white flex items-center justify-center z-10 shadow-sm transition-all group-hover:scale-110",
-                    idx === 0 ? "bg-[#1C8AFF]" : "bg-slate-200"
-                  )}>
-                    <div className={cn(
-                      "h-1.5 w-1.5 rounded-full",
-                      idx === 0 ? "bg-white animate-pulse" : "bg-white"
-                    )} />
-                  </div>
-                  <div>
-                    <h3 className={cn(
-                      "text-xs font-semibold",
-                      idx === 0 ? "text-[#1C8AFF]" : "text-slate-700"
-                    )}>{entry.title}</h3>
-                    {entry.description && (
-                      <p className="mt-1 line-clamp-2 text-[10px] text-slate-500">{entry.description}</p>
-                    )}
-                    <p className="mt-2 text-[9px] font-medium text-slate-400">{new Date(entry.createdAt).toLocaleString()}</p>
-                  </div>
-                </div>
-              ))}
-
-              {/* Core Status: If Completed */}
-              {booking?.status === "completed" && (
-                <div className="relative rounded-xl border border-blue-100 bg-blue-50 p-3 pl-10 shadow-sm">
-                  <div className="absolute left-3 top-4 h-6 w-6 rounded-full bg-blue-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
-                    <Check className="h-3 w-3 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold text-blue-700">Service Completed</h3>
-                    <p className="mt-1 text-[10px] text-slate-500">
-                      {booking.completedAt ? new Date(booking.completedAt).toLocaleString() : ""}
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
 
-        {/* Quick Info Section */}
-        <div className="border-t border-slate-100 bg-slate-50 p-5 shrink-0">
-          <h3 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Service Details</h3>
-          <div className="rounded-xl border border-slate-200 bg-white p-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400">
-                <Monitor className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="line-clamp-1 text-[11px] font-semibold text-slate-700">{booking?.service?.name || booking?.bookAnExpert?.name}</p>
-                <p className="text-[9px] text-slate-500">Service Module</p>
-              </div>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
-              <div>
-                <p className="text-[9px] uppercase tracking-wide text-slate-400">Date</p>
-                <p className="text-[11px] font-semibold text-slate-700">
-                  {booking ? new Date(booking.scheduledAt).toLocaleDateString("en-IN") : "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-[9px] uppercase tracking-wide text-slate-400">Time</p>
-                <p className="text-[11px] font-semibold text-slate-700">
-                  {booking ? new Date(booking.scheduledAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "-"}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Select Status Dialog */}
-      <Dialog open={isStatusOpen} onOpenChange={setIsStatusOpen}>
-        <DialogContent className="max-w-md p-0 overflow-hidden bg-white">
-          <DialogHeader className="p-6 border-b">
-            <DialogTitle>Select Status</DialogTitle>
-          </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto py-2">
-            {STATUS_OPTIONS.map((status) => (
-              <button
-                key={status}
-                disabled={updatingStatus}
-                onClick={() => handleStatusUpdate(status)}
-                className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors border-b last:border-0 disabled:opacity-50"
-              >
-                <div className="flex items-center gap-3">
-                  <span className={cn(
-                    "text-sm font-medium",
-                    booking?.status === status ? "text-[#1C8AFF]" : "text-slate-700"
-                  )}>{status}</span>
-                  {booking?.status === status && <Check className="h-3.5 w-3.5 text-[#1C8AFF]" />}
-                </div>
-                {updatingStatus && booking?.status !== status ? null : (
+        {/* Select Status Dialog */}
+        <Dialog open={isStatusOpen} onOpenChange={setIsStatusOpen}>
+          <DialogContent className="max-w-md p-0 overflow-hidden bg-white">
+            <DialogHeader className="p-6 border-b">
+              <DialogTitle>Select Status</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[60vh] overflow-y-auto py-2">
+              {STATUS_OPTIONS.map((status) => (
+                <button
+                  key={status}
+                  disabled={updatingStatus}
+                  onClick={() => handleStatusUpdate(status)}
+                  className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors border-b last:border-0 disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={cn(
+                      "text-sm font-medium",
+                      booking?.status === status ? "text-[#1C8AFF]" : "text-slate-700"
+                    )}>{status}</span>
+                    {booking?.status === status && <Check className="h-3.5 w-3.5 text-[#1C8AFF]" />}
+                  </div>
+                  {updatingStatus && booking?.status !== status ? null : (
                     <ChevronRight className="h-4 w-4 text-slate-400" />
-                )}
-                {updatingStatus && booking?.status === status && (
+                  )}
+                  {updatingStatus && booking?.status === status && (
                     <Loader2 className="h-4 w-4 animate-spin text-[#1C8AFF]" />
-                )}
-              </button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 }

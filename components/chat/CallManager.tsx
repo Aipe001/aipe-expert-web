@@ -121,7 +121,7 @@ export function CallManager() {
             console.log("[CallManager] Joined & Published successfully");
 
             // Subscribe to any remote users already in the channel
-            const existingUsers = client.remoteUsers;
+            const existingUsers: any[] = client.remoteUsers;
             console.log("[CallManager] Existing remote users after join:", existingUsers.length);
             for (const remoteUser of existingUsers) {
                 if (remoteUser.hasAudio && !remoteUser.audioTrack) {

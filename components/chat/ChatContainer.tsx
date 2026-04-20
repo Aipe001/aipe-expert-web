@@ -669,10 +669,10 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#F4F7F9] overflow-hidden">
-    <div className="flex h-full bg-[#F8FAFC]">
+    <div className="flex flex-col flex-1 h-full bg-[#F4F7F9] overflow-hidden min-h-0">
+    <div className="flex flex-1 min-h-0 bg-[#F8FAFC]">
       {/* Left Chat Main Area */}
-      <div className="flex-1 flex flex-col min-w-0 border-r border-slate-200">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 border-r border-slate-200">
         {/* Header */}
         <div className="h-16 flex items-center justify-between px-6 bg-white border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-3">
@@ -690,7 +690,12 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
               )}></div>
             </div>
             <div>
-              <h1 className="text-sm font-bold text-slate-900 line-clamp-1">{getParticipantName()}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-bold text-slate-900 line-clamp-1">{getParticipantName()}</h1>
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-700 hidden sm:block">
+                  online
+                </span>
+              </div>
               <p className="text-[10px] text-slate-500 font-medium">#{booking?.bookingNumber}</p>
             </div>
           </div>
@@ -814,56 +819,10 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
 
         {/* Chat Main ContentWrapper */}
         <div className={cn(
-          "flex-1 flex flex-col min-h-0",
+          "flex-1 flex flex-col min-h-0 relative overflow-hidden",
           activeTab === "chat" ? "flex" : "hidden xl:flex"
         )}>
-          {/* Booking Progress */}
-          <div className="shrink-0 border-b border-slate-200 bg-white px-4 md:px-6 py-3 md:py-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Status</p>
-                <h2 className="mt-1 text-sm font-semibold text-slate-800">Booking Timeline</h2>
-              </div>
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 hidden sm:block">
-                Expert is Active
-              </span>
-            </div>
-            <div className="mt-4 flex gap-2 overflow-x-auto pb-2 scrollbar-hide md:grid md:grid-cols-4 md:overflow-visible md:pb-0">
-              {statusSteps.map((step, index) => (
-                <div
-                  key={step.label}
-                  className={cn(
-                    "min-w-fit rounded-xl border px-3 py-3 md:min-w-0 transition-colors",
-                    step.completed
-                      ? "border-blue-200 bg-blue-50/70"
-                      : "border-slate-200 bg-slate-50"
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "flex h-5 w-5 items-center justify-center shrink-0 rounded-full border text-[10px] font-bold",
-                        step.completed
-                          ? "border-blue-500 bg-blue-500 text-white"
-                          : "border-slate-300 bg-white text-slate-500"
-                      )}
-                    >
-                      {step.completed ? <Check className="h-3 w-3" /> : index + 1}
-                    </span>
-                    <span
-                      className={cn(
-                        "line-clamp-2 text-[11px] font-semibold whitespace-nowrap md:whitespace-normal",
-                        step.completed ? "text-blue-700" : "text-slate-600"
-                      )}
-                    >
-                      {step.label}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
+          
 
 
       {/* Call Banner */}
@@ -871,9 +830,15 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
         {isInCall && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
+            animate={{ 
+              height: (isVideoCall && isCallActive) ? "100%" : "auto",
+              opacity: 1 
+            }}
             exit={{ height: 0, opacity: 0 }}
-            className="bg-slate-900 text-white shrink-0 overflow-hidden"
+            className={cn(
+              "bg-slate-900 text-white overflow-hidden flex flex-col z-50",
+              (isVideoCall && isCallActive) ? "absolute inset-0" : "shrink-0"
+            )}
           >
             <div className="px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1166,8 +1131,8 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
       </div>
 
       {/* Right Sidebar - Status Timeline Tracking */}
-      <div className="w-80 hidden xl:flex flex-col border-l border-slate-200 bg-white/80 backdrop-blur-sm overflow-hidden shrink-0">
-        <div className="border-b border-slate-100 bg-gradient-to-r from-[#1C8AFF]/10 to-white p-6">
+      <div className="w-80 hidden xl:flex flex-col border-l border-slate-200 bg-white/80 backdrop-blur-sm overflow-hidden shrink-0 h-full">
+        <div className="border-b border-slate-100 bg-gradient-to-r from-[#1C8AFF]/10 to-white p-6 shrink-0">
           <div>
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Tracking</h2>
             <p className="mt-0.5 text-[10px] font-medium text-slate-500">Live service updates</p>
@@ -1243,7 +1208,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
         </div>
 
         {/* Quick Info Section */}
-        <div className="border-t border-slate-100 bg-slate-50 p-5">
+        <div className="border-t border-slate-100 bg-slate-50 p-5 shrink-0">
           <h3 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Service Details</h3>
           <div className="rounded-xl border border-slate-200 bg-white p-3">
             <div className="flex items-center gap-3">

@@ -34,11 +34,14 @@ export function NotificationManager() {
       try {
         const messaging = await getFirebaseMessaging();
         if (!messaging) {
-          console.log("[NotificationManager] Firebase messaging is not supported");
+          console.warn("[NotificationManager] Firebase messaging is not supported. This is likely because the site is not running on localhost or via HTTPS (Secure Context required).");
           return;
         }
 
+        console.log("[NotificationManager] Firebase messaging supported, requesting permission...");
         const permission = await Notification.requestPermission();
+        console.log("[NotificationManager] Notification permission status:", permission);
+        
         if (permission === 'granted') {
           const fcmToken = await getToken(messaging, {
             vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY || "BOytKcvfv4dQb3jHJUkwjn0gw9IH888lGLI3Xzda1s9U86qqmyG4DJ77QVkFnC-tQE5VImxzXDeE4jzmOpUpmdg",

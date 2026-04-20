@@ -31,6 +31,8 @@ export const getFirebaseMessaging = async () => {
             const supported = await isSupported();
             if (supported) {
                 return getMessaging(app);
+            } else {
+                console.warn("[Firebase] Messaging is not supported in this environment (needs HTTPS or localhost)");
             }
         } catch (err) {
             console.error("[Firebase] Error checking for messaging support:", err);

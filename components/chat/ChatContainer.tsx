@@ -93,6 +93,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   const [isUploading, setIsUploading] = useState(false);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [activeTab, setActiveTab] = useState<"chat" | "tracking">("chat");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -108,6 +109,11 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   const remoteVideoRef = useRef<HTMLDivElement>(null);
 
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
+
+  // Caller-side ringing sound refs
+  const callerAudioCtxRef = useRef<AudioContext | null>(null);
+  const callerRingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const callStartTimeRef = useRef<number>(0);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -154,29 +160,61 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
     };
   }, [currentCall?.status, currentCall?.startTime]);
 
-  // Handle Video Rendering
+  // Handle Video Rendering with retry logic
   useEffect(() => {
-    if (currentCall?.status === "active") {
-      const { audioTrack, videoTrack, screenTrack, client } = getGlobalTracks();
+    if (currentCall?.status !== "active" || currentCall?.callType !== "video") return;
 
-      if (currentCall.callType === "video") {
-        // Local rendering: Screen track takes priority if sharing
-        if (currentCall.isScreenSharing && screenTrack && localVideoRef.current) {
-          screenTrack.play(localVideoRef.current);
-        } else if (currentCall.isVideoEnabled && videoTrack && localVideoRef.current) {
-          videoTrack.play(localVideoRef.current);
+    let retryTimer: ReturnType<typeof setInterval> | null = null;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 20;
+
+    const tryPlayVideo = () => {
+      const { videoTrack, screenTrack, client } = getGlobalTracks();
+
+      // Local rendering
+      if (currentCall.isScreenSharing && screenTrack && localVideoRef.current) {
+        try { screenTrack.play(localVideoRef.current); } catch (e) { console.warn("[VideoRender] Local screen play error:", e); }
+      } else if (currentCall.isVideoEnabled && videoTrack && localVideoRef.current) {
+        try { videoTrack.play(localVideoRef.current); } catch (e) { console.warn("[VideoRender] Local video play error:", e); }
+      }
+
+      // Remote video
+      let remoteVideoPlayed = false;
+      if (client && remoteVideoRef.current) {
+        let remoteUser = currentCall.remoteUid
+          ? client.remoteUsers.find((u: any) => u.uid === currentCall.remoteUid)
+          : null;
+
+        if (!remoteUser || !remoteUser.videoTrack) {
+          remoteUser = client.remoteUsers.find((u: any) => u.videoTrack);
         }
 
-        // Handle remote video
-        if (client) {
-          const remoteUsers = client.remoteUsers;
-          const remoteUser = remoteUsers.find((u: any) => u.uid === currentCall.remoteUid);
-          if (remoteUser && remoteUser.videoTrack && remoteVideoRef.current) {
+        if (remoteUser && remoteUser.videoTrack) {
+          try {
             remoteUser.videoTrack.play(remoteVideoRef.current);
+            remoteVideoPlayed = true;
+            console.log("[VideoRender] Remote video playing for uid:", remoteUser.uid);
+          } catch (e) {
+            console.warn("[VideoRender] Remote video play error:", e);
           }
         }
       }
-    }
+
+      attempts++;
+      if ((remoteVideoPlayed && localVideoRef.current) || attempts >= MAX_ATTEMPTS) {
+        if (retryTimer) {
+          clearInterval(retryTimer);
+          retryTimer = null;
+        }
+      }
+    };
+
+    tryPlayVideo();
+    retryTimer = setInterval(tryPlayVideo, 500);
+
+    return () => {
+      if (retryTimer) clearInterval(retryTimer);
+    };
   }, [currentCall?.status, currentCall?.isVideoEnabled, currentCall?.isScreenSharing, currentCall?.remoteUid, currentCall?.remoteVideoVersion, currentCall?.isLocalStreamActive]);
 
   const checkExistingCall = async () => {
@@ -404,6 +442,46 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  // ── Caller ringing sound helpers ────────────────────
+  const playCallerRing = () => {
+    if (!callerAudioCtxRef.current) {
+      callerAudioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    const ctx = callerAudioCtxRef.current;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+
+    const playTone = () => {
+      if (!callerAudioCtxRef.current) return;
+      const c = callerAudioCtxRef.current;
+      const osc = c.createOscillator();
+      const gain = c.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, c.currentTime);
+      osc.frequency.setValueAtTime(480, c.currentTime + 0.1);
+      gain.gain.setValueAtTime(0, c.currentTime);
+      gain.gain.linearRampToValueAtTime(0.4, c.currentTime + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.01, c.currentTime + 1);
+      osc.connect(gain);
+      gain.connect(c.destination);
+      osc.start(c.currentTime);
+      osc.stop(c.currentTime + 1);
+    };
+
+    playTone();
+    callerRingRef.current = setInterval(playTone, 2000);
+  };
+
+  const stopCallerRing = () => {
+    if (callerRingRef.current) {
+      clearInterval(callerRingRef.current);
+      callerRingRef.current = null;
+    }
+    if (callerAudioCtxRef.current?.state === 'running') {
+      callerAudioCtxRef.current.close().catch(() => {});
+      callerAudioCtxRef.current = null;
+    }
+  };
+
   const handleStartCall = async (type: CallType) => {
     if (!bookingId || (currentCall && currentCall.status !== "idle")) return;
 
@@ -443,15 +521,26 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
         status: "ringing"
       }));
 
+      // Start caller-side ringing sound
+      callStartTimeRef.current = Date.now();
+      playCallerRing();
+
       // Poll for call acceptance
       callPollRef.current = setInterval(async () => {
         try {
           const pollResult = await agoraApi.getCallStatus(bookingId);
           if (pollResult.status === "active") {
             stopCallPoll();
+            stopCallerRing();
             dispatch(setCallStatus("active"));
           } else if (pollResult.status === "ended" || pollResult.status === "none") {
+            // Grace period: ignore "none" responses for the first 15 seconds
+            const elapsed = Date.now() - callStartTimeRef.current;
+            if (elapsed < 15000 && pollResult.status === "none") {
+              return; // Still within grace period, keep ringing
+            }
             stopCallPoll();
+            stopCallerRing();
             dispatch(setCallStatus("ended"));
             setTimeout(() => dispatch(resetCall()), 1500);
           }
@@ -460,17 +549,19 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
         }
       }, 2000);
 
-      // Timeout after 30s
+      // Timeout after 45s
       setTimeout(() => {
         if (callPollRef.current) {
           stopCallPoll();
+          stopCallerRing();
           agoraApi.rejectCall(bookingId).catch(() => { });
           dispatch(setCallStatus("ended"));
           setTimeout(() => dispatch(resetCall()), 1500);
         }
-      }, 30000);
+      }, 45000);
     } catch (err) {
       console.error("Failed to start call:", err);
+      stopCallerRing();
       dispatch(resetCall());
       toast.error("Failed to start call");
     }
@@ -479,6 +570,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
   const handleEndCall = async () => {
     stopCallTimer();
     stopCallPoll();
+    stopCallerRing();
     dispatch(setCallStatus("ended"));
 
     try {
@@ -590,8 +682,12 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
             >
               <ChevronLeft className="h-5 w-5 text-slate-600" />
             </button>
-            <div className="h-10 w-10 rounded-full bg-[#1C8AFF]/10 flex items-center justify-center text-[#1C8AFF] font-bold">
+            <div className="relative h-10 w-10 rounded-full bg-[#1C8AFF] flex items-center justify-center text-white font-bold">
               {getParticipantName() ? getParticipantName()[0] : "C"}
+              <div className={cn(
+                "absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white",
+                participantStatus?.isOnline ? "bg-green-500" : "bg-slate-300"
+              )}></div>
             </div>
             <div>
               <h1 className="text-sm font-bold text-slate-900 line-clamp-1">{getParticipantName()}</h1>
@@ -600,15 +696,19 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
           </div>
           
           <div className="flex items-center gap-4">
-            <div className="hidden md:flex flex-col items-end mr-2">
-              <span className="text-[10px] text-slate-400 uppercase font-bold">Current Status</span>
+            <div className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold capitalize transition-colors",
+              booking?.status === "completed" ? "bg-blue-50 text-blue-600" :
+              booking?.status === "active" || !booking?.status ? "bg-green-50 text-green-600" : 
+              "bg-amber-50 text-amber-600"
+            )}>
               <span className={cn(
-                "text-xs font-bold capitalize",
-                booking?.status === "active" ? "text-green-600" :
-                booking?.status === "completed" ? "text-blue-600" : "text-amber-600"
-              )}>
-                {booking?.status || "Active"}
-              </span>
+                "w-1.5 h-1.5 rounded-full shadow-sm",
+                booking?.status === "completed" ? "bg-blue-600" :
+                booking?.status === "active" || !booking?.status ? "bg-green-500" : 
+                "bg-amber-500 animate-pulse"
+              )}></span>
+              {booking?.status || "Active"}
             </div>
 
             <div className="flex items-center gap-2">
@@ -636,52 +736,133 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
           </div>
         </div>
 
-      {/* Booking Progress */}
-      <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Status</p>
-            <h2 className="mt-1 text-sm font-semibold text-slate-800">Booking Timeline</h2>
-          </div>
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
-            Expert is Active
-          </span>
+        {/* Tab Switcher for Mobile/Tablet */}
+        <div className="flex xl:hidden border-b border-slate-200 bg-white shrink-0">
+          <button
+            onClick={() => setActiveTab("chat")}
+            className={cn(
+              "flex-1 py-3 text-[13px] font-bold border-b-2 text-center transition-colors",
+              activeTab === "chat" ? "border-[#1C8AFF] text-[#1C8AFF]" : "border-transparent text-slate-500 hover:text-slate-700"
+            )}
+          >
+            Chat
+          </button>
+          <button
+            onClick={() => setActiveTab("tracking")}
+            className={cn(
+              "flex-1 py-3 text-[13px] font-bold border-b-2 text-center transition-colors",
+              activeTab === "tracking" ? "border-[#1C8AFF] text-[#1C8AFF]" : "border-transparent text-slate-500 hover:text-slate-700"
+            )}
+          >
+            Tracking
+          </button>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
-          {statusSteps.map((step, index) => (
-            <div
-              key={step.label}
-              className={cn(
-                "rounded-xl border px-3 py-3 transition-colors",
-                step.completed
-                  ? "border-blue-200 bg-blue-50/70"
-                  : "border-slate-200 bg-slate-50"
-              )}
+
+        {/* Mobile Tracking View */}
+        <div className={cn(
+          "flex-1 overflow-y-auto flex-col xl:hidden",
+          activeTab === "tracking" ? "flex" : "hidden"
+        )}>
+          <div className="p-6">
+            <button
+              onClick={() => setIsStatusOpen(true)}
+              className="w-full mb-6 rounded-xl bg-[#1C8AFF] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1675de]"
             >
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-bold",
-                    step.completed
-                      ? "border-blue-500 bg-blue-500 text-white"
-                      : "border-slate-300 bg-white text-slate-500"
-                  )}
-                >
-                  {step.completed ? <Check className="h-3 w-3" /> : index + 1}
-                </span>
-                <span
-                  className={cn(
-                    "line-clamp-2 text-[11px] font-semibold",
-                    step.completed ? "text-blue-700" : "text-slate-600"
-                  )}
-                >
-                  {step.label}
-                </span>
+              Post New Update
+            </button>
+            
+            <div className="relative">
+              {/* Timeline Line */}
+              <div className="absolute left-[11px] top-2 bottom-2 w-[2px] bg-slate-200" />
+              <div className="space-y-4">
+                <div className="relative rounded-xl border border-slate-200 bg-white p-3 pl-10 shadow-sm">
+                  <div className="absolute left-3 top-4 h-6 w-6 rounded-full bg-emerald-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
+                    <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-slate-900">Booking Started</h3>
+                    <p className="mt-1 text-[10px] font-medium text-slate-500">
+                      {booking ? new Date(booking.createdAt).toLocaleString() : ""}
+                    </p>
+                  </div>
+                </div>
+                {booking?.timeline?.map((update: any, index: number) => (
+                  <div key={index} className="relative rounded-xl border border-slate-200 bg-white p-3 pl-10 shadow-sm">
+                    <div className="absolute left-3 top-4 h-6 w-6 rounded-full bg-slate-100 border-4 border-white flex items-center justify-center z-10 shadow-sm">
+                      <div className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        index === (booking.timeline?.length || 0) - 1 ? "bg-amber-500" : "bg-slate-400"
+                      )} />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-semibold text-slate-900">{update.status}</h3>
+                      <p className="mt-1 text-[10px] font-medium text-slate-500">
+                        {new Date(update.timestamp).toLocaleString()}
+                      </p>
+                      {update.notes && (
+                        <p className="mt-2 text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
+                          {update.notes}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
+          </div>
         </div>
-      </div>
+
+        {/* Chat Main ContentWrapper */}
+        <div className={cn(
+          "flex-1 flex flex-col min-h-0",
+          activeTab === "chat" ? "flex" : "hidden xl:flex"
+        )}>
+          {/* Booking Progress */}
+          <div className="shrink-0 border-b border-slate-200 bg-white px-4 md:px-6 py-3 md:py-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Status</p>
+                <h2 className="mt-1 text-sm font-semibold text-slate-800">Booking Timeline</h2>
+              </div>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 hidden sm:block">
+                Expert is Active
+              </span>
+            </div>
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-2 scrollbar-hide md:grid md:grid-cols-4 md:overflow-visible md:pb-0">
+              {statusSteps.map((step, index) => (
+                <div
+                  key={step.label}
+                  className={cn(
+                    "min-w-fit rounded-xl border px-3 py-3 md:min-w-0 transition-colors",
+                    step.completed
+                      ? "border-blue-200 bg-blue-50/70"
+                      : "border-slate-200 bg-slate-50"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "flex h-5 w-5 items-center justify-center shrink-0 rounded-full border text-[10px] font-bold",
+                        step.completed
+                          ? "border-blue-500 bg-blue-500 text-white"
+                          : "border-slate-300 bg-white text-slate-500"
+                      )}
+                    >
+                      {step.completed ? <Check className="h-3 w-3" /> : index + 1}
+                    </span>
+                    <span
+                      className={cn(
+                        "line-clamp-2 text-[11px] font-semibold whitespace-nowrap md:whitespace-normal",
+                        step.completed ? "text-blue-700" : "text-slate-600"
+                      )}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
 
 
@@ -789,25 +970,25 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
 
             {/* Video area during active video call */}
             {isVideoCall && isCallActive && (
-              <div className="relative w-full aspect-video bg-black max-h-[40vh]">
+              <div className="relative w-full h-full flex-1 bg-black overflow-hidden flex flex-col items-center justify-center">
                 {/* Remote video */}
-                <div ref={remoteVideoRef} className="w-full h-full">
+                <div ref={remoteVideoRef} className="absolute inset-0 w-full h-full object-cover">
                   {currentCall?.remoteUid === null && (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-white/30">
-                      <Video className="h-12 w-12 mb-2" />
-                      <p className="text-sm">Waiting for video...</p>
+                    <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center text-white/30 backdrop-blur-sm">
+                      <Video className="h-12 w-12 mb-2 animate-pulse" />
+                      <p className="text-sm font-medium">Waiting for video...</p>
                     </div>
                   )}
                 </div>
                 {/* Local video (PIP) */}
                 {(currentCall?.isVideoEnabled || currentCall?.isScreenSharing) && (
-                  <div className="absolute bottom-4 right-4 w-32 h-24 rounded-xl overflow-hidden border-2 border-white/30 shadow-lg bg-slate-800">
+                  <div className="absolute bottom-6 right-6 w-28 h-40 md:w-40 md:h-56 rounded-2xl overflow-hidden border-2 border-white/50 shadow-2xl bg-slate-800 z-10 transition-all hover:scale-105">
                     {currentCall?.isScreenSharing && (
-                      <div className="absolute inset-0 z-10 bg-blue-600/20 flex items-center justify-center">
-                        <Monitor className="h-4 w-4 text-white animate-pulse" />
+                      <div className="absolute inset-0 z-10 bg-blue-600/30 flex items-center justify-center backdrop-blur-[2px]">
+                        <Monitor className="h-6 w-6 text-white animate-pulse" />
                       </div>
                     )}
-                    <div ref={localVideoRef} className="w-full h-full" />
+                    <div ref={localVideoRef} className="w-full h-full object-cover" />
                   </div>
                 )}
               </div>
@@ -817,9 +998,10 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
       </AnimatePresence>
 
       {/* Message Area */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3">
-        {messages.map((msg) => (
-          <motion.div
+      {!isCallActive || !isVideoCall ? (
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3">
+          {messages.map((msg) => (
+            <motion.div
             key={msg.id}
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -921,9 +1103,13 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
         )}
         <div ref={messagesEndRef} />
       </div>
+      ) : null}
 
       {/* Message Input Footer */}
-      <footer className="p-4 bg-transparent shrink-0">
+      <footer className={cn(
+        "p-4 shrink-0 transition-colors",
+        isCallActive && isVideoCall ? "bg-slate-900 border-t border-white/10" : "bg-transparent"
+      )}>
         <div className="max-w-4xl mx-auto flex items-center gap-3">
           <div className="flex-1 bg-white rounded-full border border-slate-200 shadow-sm flex items-center px-4 py-1 h-12 group focus-within:shadow-[0_0_20px_rgba(28,138,255,0.3)] focus-within:border-[#1C8AFF]/30 transition-all duration-300">
             <Input
@@ -1119,6 +1305,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
           </div>
         </DialogContent>
       </Dialog>
+    </div>
     </div>
   );
 }

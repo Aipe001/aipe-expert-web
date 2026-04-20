@@ -9,6 +9,7 @@ import {
   acceptBookingRequest,
   rejectBookingRequest,
   updateBookingStatus,
+  addBookingTimeline,
   Booking,
 } from "@/lib/api/bookings";
 import { Card, CardContent } from "@/components/ui/card";
@@ -139,8 +140,17 @@ function BookingsContent() {
   const handleStatusUpdate = async (status: string) => {
     if (!statusBookingId) return;
     try {
-      await updateBookingStatus(statusBookingId, status);
-      toast.success(`Status updated to "${status}"`);
+      const coreStatuses = ["active", "completed", "cancelled"];
+      const isCoreStatus = coreStatuses.includes(status.toLowerCase().replace(/ /g, "_"));
+
+      if (isCoreStatus) {
+        await updateBookingStatus(statusBookingId, status.toLowerCase().replace(/ /g, "_"));
+        toast.success(`Status updated to "${status}"`);
+      } else {
+        await addBookingTimeline(statusBookingId, status);
+        toast.success(`Tracking updated: "${status}"`);
+      }
+
       setIsStatusOpen(false);
       setStatusBookingId(null);
       await fetchData();

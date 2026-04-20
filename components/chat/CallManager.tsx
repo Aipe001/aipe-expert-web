@@ -66,7 +66,9 @@ export function CallManager() {
             globalAgoraClient = client;
 
             client.on("user-published", async (remoteUser: any, mediaType: "audio" | "video") => {
+                console.log("[CallManager] user-published event:", remoteUser.uid, mediaType);
                 await client.subscribe(remoteUser, mediaType);
+                console.log("[CallManager] Subscribed to remote user:", remoteUser.uid, mediaType, "hasVideoTrack:", !!remoteUser.videoTrack, "hasAudioTrack:", !!remoteUser.audioTrack);
                 
                 const update: any = { remoteUid: remoteUser.uid as number };
                 if (mediaType === "video") {
@@ -80,18 +82,29 @@ export function CallManager() {
                 // Video track will be played by the component that gets the tracks
             });
 
-            client.on("user-left", () => {
+            client.on("user-unpublished", (remoteUser: any, mediaType: "audio" | "video") => {
+                console.log("[CallManager] Remote user unpublished:", remoteUser.uid, mediaType);
+                if (mediaType === "video") {
+                    // Bump version to force re-render (they might be switching to/from screen share)
+                    dispatch(updateCallDetails({ remoteVideoVersion: Date.now() }));
+                }
+            });
+
+            client.on("user-left", (remoteUser: any) => {
+                console.log("[CallManager] Remote user left:", remoteUser?.uid);
                 dispatch(setCallStatus("ended"));
                 handleDisconnect();
                 setTimeout(() => dispatch(resetCall()), 1500);
             });
 
+            console.log("[CallManager] Joining channel:", currentCall.agoraChannel, "with uid:", currentCall.agoraUid);
             await client.join(
                 currentCall.agoraAppId,
                 currentCall.agoraChannel,
                 currentCall.agoraToken,
                 currentCall.agoraUid || 0
             );
+            console.log("[CallManager] Joined channel successfully");
 
             const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
             globalLocalAudioTrack = audioTrack;
@@ -106,6 +119,35 @@ export function CallManager() {
 
             dispatch(updateCallDetails({ isLocalStreamActive: true }));
             console.log("[CallManager] Joined & Published successfully");
+
+            // Subscribe to any remote users already in the channel
+            const existingUsers: any[] = client.remoteUsers;
+            console.log("[CallManager] Existing remote users after join:", existingUsers.length);
+            for (const remoteUser of existingUsers) {
+                if (remoteUser.hasAudio && !remoteUser.audioTrack) {
+                    try {
+                        await client.subscribe(remoteUser, "audio");
+                        remoteUser.audioTrack?.play();
+                        console.log("[CallManager] Subscribed to existing user audio:", remoteUser.uid);
+                    } catch (e) {
+                        console.warn("[CallManager] Failed to subscribe to existing audio:", e);
+                    }
+                }
+                if (remoteUser.hasVideo && !remoteUser.videoTrack) {
+                    try {
+                        await client.subscribe(remoteUser, "video");
+                        console.log("[CallManager] Subscribed to existing user video:", remoteUser.uid);
+                    } catch (e) {
+                        console.warn("[CallManager] Failed to subscribe to existing video:", e);
+                    }
+                }
+                if (remoteUser.hasAudio || remoteUser.hasVideo) {
+                    dispatch(updateCallDetails({
+                        remoteUid: remoteUser.uid as number,
+                        remoteVideoVersion: Date.now(),
+                    }));
+                }
+            }
         } catch (err) {
             console.error("[CallManager] Join error:", err);
             toast.error("Failed to connect to call");

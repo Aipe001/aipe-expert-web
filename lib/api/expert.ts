@@ -56,6 +56,7 @@ export interface ExpertProfile {
   status: string;
   userId: string;
   isVerified: boolean;
+  isActive: boolean;
   bookAnExpertSubscriptions?: BookAnExpertPlan[];
 }
 

@@ -130,7 +130,7 @@ export function BookingRequestModal() {
                 <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/20 shadow-xl">
                   <Briefcase className="w-8 h-8 text-white" />
                 </div>
-                <h2 className="text-white text-2xl font-bold tracking-tight mb-1">New Order Request</h2>
+                <h2 className="text-white text-2xl font-bold tracking-tight mb-1">Incoming Booking</h2>
                 <p className="text-blue-100/80 font-medium text-sm">Customer is waiting for an expert</p>
               </div>
 

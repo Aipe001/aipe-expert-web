@@ -67,13 +67,33 @@ export function CallManager() {
 
             client.on("user-published", async (remoteUser: any, mediaType: "audio" | "video") => {
                 console.log("[CallManager] user-published event:", remoteUser.uid, mediaType);
+
+                const isAdmin = remoteUser.uid === 9999;
+
+                // If this is the Admin user (9999) and they published 'video', purposefully ignore it 
+                // so we don't break the 1v1 video call UI layout
+                if (isAdmin && mediaType === "video") {
+                    console.log("[CallManager] Ignoring Admin video track to preserve 1v1 UI layout");
+                    return;
+                }
+
                 await client.subscribe(remoteUser, mediaType);
                 console.log("[CallManager] Subscribed to remote user:", remoteUser.uid, mediaType, "hasVideoTrack:", !!remoteUser.videoTrack, "hasAudioTrack:", !!remoteUser.audioTrack);
+
+                const update: any = {};
                 
-                const update: any = { remoteUid: remoteUser.uid as number };
-                if (mediaType === "video") {
-                    update.remoteVideoVersion = Date.now();
+                if (isAdmin) {
+                    if (mediaType === "audio") {
+                        toast("🛡️ Service Manager has joined the audio", { position: "top-center" });
+                        update.adminInAudio = true;
+                    }
+                } else {
+                    update.remoteUid = remoteUser.uid as number;
+                    if (mediaType === "video") {
+                        update.remoteVideoVersion = Date.now();
+                    }
                 }
+                
                 dispatch(updateCallDetails(update));
 
                 if (mediaType === "audio") {
@@ -92,6 +112,13 @@ export function CallManager() {
 
             client.on("user-left", (remoteUser: any) => {
                 console.log("[CallManager] Remote user left:", remoteUser?.uid);
+
+                if (remoteUser?.uid === 9999) {
+                    toast("🛡️ Service Manager left the audio", { position: "top-center" });
+                    dispatch(updateCallDetails({ adminInAudio: false }));
+                    return;
+                }
+
                 dispatch(setCallStatus("ended"));
                 handleDisconnect();
                 setTimeout(() => dispatch(resetCall()), 1500);
@@ -121,19 +148,27 @@ export function CallManager() {
             console.log("[CallManager] Joined & Published successfully");
 
             // Subscribe to any remote users already in the channel
-            const existingUsers: any[] = client.remoteUsers;
+            const existingUsers = client.remoteUsers;
             console.log("[CallManager] Existing remote users after join:", existingUsers.length);
             for (const remoteUser of existingUsers) {
+                const isAdmin = remoteUser.uid === 9999;
                 if (remoteUser.hasAudio && !remoteUser.audioTrack) {
                     try {
                         await client.subscribe(remoteUser, "audio");
-                        remoteUser.audioTrack?.play();
+                        if (remoteUser.audioTrack) {
+                            (remoteUser.audioTrack as any).play();
+                        }
+                        if (isAdmin) {
+                            toast("🛡️ Service Manager is in the audio channel", { position: "top-center" });
+                            dispatch(updateCallDetails({ adminInAudio: true }));
+                        }
                         console.log("[CallManager] Subscribed to existing user audio:", remoteUser.uid);
                     } catch (e) {
                         console.warn("[CallManager] Failed to subscribe to existing audio:", e);
                     }
                 }
-                if (remoteUser.hasVideo && !remoteUser.videoTrack) {
+                
+                if (!isAdmin && remoteUser.hasVideo && !remoteUser.videoTrack) {
                     try {
                         await client.subscribe(remoteUser, "video");
                         console.log("[CallManager] Subscribed to existing user video:", remoteUser.uid);
@@ -141,7 +176,8 @@ export function CallManager() {
                         console.warn("[CallManager] Failed to subscribe to existing video:", e);
                     }
                 }
-                if (remoteUser.hasAudio || remoteUser.hasVideo) {
+                
+                if (!isAdmin && (remoteUser.hasAudio || remoteUser.hasVideo)) {
                     dispatch(updateCallDetails({
                         remoteUid: remoteUser.uid as number,
                         remoteVideoVersion: Date.now(),
@@ -212,7 +248,7 @@ export function CallManager() {
                     if (globalLocalScreenTrack) {
                         try {
                             await globalAgoraClient.unpublish([globalLocalScreenTrack]);
-                        } catch {}
+                        } catch { }
                         globalLocalScreenTrack.close();
                         globalLocalScreenTrack = null;
                     }
@@ -228,7 +264,7 @@ export function CallManager() {
                 dispatch(updateCallDetails({ isScreenSharing: false }));
                 // If it failed to start, try to restore camera
                 if (currentCall?.isVideoEnabled && globalLocalVideoTrack && !globalLocalVideoTrack.isPublished) {
-                    globalAgoraClient?.publish([globalLocalVideoTrack]).catch(() => {});
+                    globalAgoraClient?.publish([globalLocalVideoTrack]).catch(() => { });
                 }
             }
         };

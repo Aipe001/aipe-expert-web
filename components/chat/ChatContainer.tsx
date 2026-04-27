@@ -166,19 +166,17 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
 
     let retryTimer: ReturnType<typeof setInterval> | null = null;
     let attempts = 0;
-    const MAX_ATTEMPTS = 20;
+    const MAX_ATTEMPTS = 30;
 
-    const tryPlayVideo = () => {
+    const playAllTracks = () => {
       const { videoTrack, screenTrack, client } = getGlobalTracks();
 
-      // Local rendering
       if (currentCall.isScreenSharing && screenTrack && localVideoRef.current) {
         try { screenTrack.play(localVideoRef.current); } catch (e) { console.warn("[VideoRender] Local screen play error:", e); }
       } else if (currentCall.isVideoEnabled && videoTrack && localVideoRef.current) {
         try { videoTrack.play(localVideoRef.current); } catch (e) { console.warn("[VideoRender] Local video play error:", e); }
       }
 
-      // Remote video
       let remoteVideoPlayed = false;
       if (client && remoteVideoRef.current) {
         let remoteUser = currentCall.remoteUid
@@ -199,21 +197,40 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
           }
         }
       }
+      return remoteVideoPlayed;
+    };
 
+    const tryPlayVideo = () => {
+      const played = playAllTracks();
       attempts++;
-      if ((remoteVideoPlayed && localVideoRef.current) || attempts >= MAX_ATTEMPTS) {
-        if (retryTimer) {
-          clearInterval(retryTimer);
-          retryTimer = null;
-        }
+      if ((played && localVideoRef.current) || attempts >= MAX_ATTEMPTS) {
+        if (retryTimer) { clearInterval(retryTimer); retryTimer = null; }
       }
     };
 
     tryPlayVideo();
     retryTimer = setInterval(tryPlayVideo, 500);
 
+    let resizeObserver: ResizeObserver | null = null;
+    if (remoteVideoRef.current) {
+      let prevW = 0;
+      let prevH = 0;
+      resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const { width, height } = entry.contentRect;
+          if (width > 0 && height > 0 && (Math.abs(width - prevW) > 10 || Math.abs(height - prevH) > 10)) {
+            prevW = width;
+            prevH = height;
+            playAllTracks();
+          }
+        }
+      });
+      resizeObserver.observe(remoteVideoRef.current);
+    }
+
     return () => {
       if (retryTimer) clearInterval(retryTimer);
+      resizeObserver?.disconnect();
     };
   }, [currentCall?.status, currentCall?.isVideoEnabled, currentCall?.isScreenSharing, currentCall?.remoteUid, currentCall?.remoteVideoVersion, currentCall?.isLocalStreamActive]);
 
@@ -834,10 +851,16 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                   exit={{ height: 0, opacity: 0 }}
                   className={cn(
                     "bg-slate-900 text-white overflow-hidden flex flex-col z-50",
-                    (isVideoCall && isCallActive) ? "absolute inset-0" : "shrink-0"
+                    (isVideoCall && isCallActive) ? "fixed inset-0 md:absolute md:inset-0" : "shrink-0"
                   )}
                 >
-                  <div className="px-4 py-3 flex items-center justify-between">
+                  {/* Compact info bar for video calls, full bar for audio */}
+                  <div className={cn(
+                    "flex items-center justify-between shrink-0 z-10",
+                    isVideoCall && isCallActive
+                      ? "absolute top-0 left-0 right-0 px-4 py-2 bg-gradient-to-b from-black/70 to-transparent"
+                      : "px-4 py-3"
+                  )}>
                     <div className="flex items-center gap-3">
                       <motion.div
                         animate={
@@ -862,81 +885,39 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                         <p className="text-xs text-white/60">
                           {currentCall?.status === "connecting" && `Connecting${isVideoCall ? " video" : ""}...`}
                           {currentCall?.status === "ringing" && `Ringing${isVideoCall ? " (Video)" : ""}...`}
-                          {currentCall?.status === "active" && `${isVideoCall ? "📹 " : ""}${formatCallDuration(callDuration)}`}
+                          {currentCall?.status === "active" && formatCallDuration(callDuration)}
                           {currentCall?.status === "ended" && "Call ended"}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {isCallActive && (
-                        <>
-                          {isVideoCall && (
-                            <>
-                              <button
-                                onClick={flipCamera}
-                                className="h-9 w-9 rounded-full flex items-center justify-center bg-white/20 hover:bg-white/30 transition-colors"
-                                title="Flip Camera"
-                              >
-                                <RefreshCcw className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => dispatch(toggleVideo())}
-                                className={cn(
-                                  "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
-                                  !currentCall?.isVideoEnabled ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
-                                )}
-                              >
-                                {currentCall?.isVideoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
-                              </button>
-                              <button
-                                onClick={() => dispatch(toggleScreenSharing())}
-                                className={cn(
-                                  "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
-                                  currentCall?.isScreenSharing ? "bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.6)]" : "bg-white/20 hover:bg-white/30"
-                                )}
-                                title={currentCall?.isScreenSharing ? "Stop Sharing" : "Share Screen"}
-                              >
-                                {currentCall?.isScreenSharing ? <MonitorOff className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={toggleSpeakerMute}
-                            className={cn(
-                              "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
-                              isSpeakerMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
-                            )}
-                          >
-                            {isSpeakerMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                          </button>
-                          <button
-                            onClick={() => dispatch(toggleMute())}
-                            className={cn(
-                              "h-9 w-9 rounded-full flex items-center justify-center transition-colors",
-                              currentCall?.isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
-                            )}
-                          >
-                            {currentCall?.isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                          </button>
-                        </>
-                      )}
-                      <button
-                        onClick={handleEndCall}
-                        className="h-9 w-9 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors"
-                      >
-                        <PhoneOff className="h-4 w-4" />
-                      </button>
-                    </div>
+                    {/* Audio-only controls inline, video controls move to bottom */}
+                    {(!isVideoCall || !isCallActive) && (
+                      <div className="flex items-center gap-2">
+                        {isCallActive && (
+                          <>
+                            <button onClick={toggleSpeakerMute} className={cn("h-9 w-9 rounded-full flex items-center justify-center transition-colors", isSpeakerMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30")}>
+                              {isSpeakerMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                            </button>
+                            <button onClick={() => dispatch(toggleMute())} className={cn("h-9 w-9 rounded-full flex items-center justify-center transition-colors", currentCall?.isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30")}>
+                              {currentCall?.isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                            </button>
+                          </>
+                        )}
+                        <button onClick={handleEndCall} className="h-9 w-9 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors">
+                          <PhoneOff className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Video area during active video call */}
                   {isVideoCall && isCallActive && (
-                    <div className="relative w-full h-full flex-1 bg-black overflow-hidden flex flex-col items-center justify-center">
+                    <div className="relative w-full flex-1 bg-black overflow-hidden">
                       {/* Remote video */}
-                      <div ref={remoteVideoRef} className="absolute inset-0 w-full h-full object-cover">
+                      <div ref={remoteVideoRef} className="absolute inset-0 w-full h-full">
                         {currentCall?.remoteUid === null && (
-                          <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center text-white/30 backdrop-blur-sm">
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-white/30">
                             <Video className="h-12 w-12 mb-2 animate-pulse" />
                             <p className="text-sm font-medium">Waiting for video...</p>
                           </div>
@@ -944,15 +925,38 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                       </div>
                       {/* Local video (PIP) */}
                       {(currentCall?.isVideoEnabled || currentCall?.isScreenSharing) && (
-                        <div className="absolute bottom-6 right-6 w-28 h-40 md:w-40 md:h-56 rounded-2xl overflow-hidden border-2 border-white/50 shadow-2xl bg-slate-800 z-10 transition-all hover:scale-105">
+                        <div className="absolute top-16 right-3 w-24 h-32 md:bottom-24 md:right-6 md:top-auto md:w-40 md:h-56 rounded-2xl overflow-hidden border-2 border-white/50 shadow-2xl bg-slate-800 z-10">
                           {currentCall?.isScreenSharing && (
                             <div className="absolute inset-0 z-10 bg-blue-600/30 flex items-center justify-center backdrop-blur-[2px]">
                               <Monitor className="h-6 w-6 text-white animate-pulse" />
                             </div>
                           )}
-                          <div ref={localVideoRef} className="w-full h-full object-cover" />
+                          <div ref={localVideoRef} className="w-full h-full" />
                         </div>
                       )}
+                      {/* Video call controls at bottom */}
+                      <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-4 pb-6 pt-12 md:pb-4 md:pt-8">
+                        <div className="flex items-center justify-center gap-3 flex-wrap">
+                          <button onClick={flipCamera} className="h-11 w-11 md:h-9 md:w-9 rounded-full flex items-center justify-center bg-white/20 hover:bg-white/30 transition-colors" title="Flip Camera">
+                            <RefreshCcw className="h-5 w-5 md:h-4 md:w-4" />
+                          </button>
+                          <button onClick={() => dispatch(toggleVideo())} className={cn("h-11 w-11 md:h-9 md:w-9 rounded-full flex items-center justify-center transition-colors", !currentCall?.isVideoEnabled ? "bg-red-500" : "bg-white/20 hover:bg-white/30")}>
+                            {currentCall?.isVideoEnabled ? <Video className="h-5 w-5 md:h-4 md:w-4" /> : <VideoOff className="h-5 w-5 md:h-4 md:w-4" />}
+                          </button>
+                          <button onClick={() => dispatch(toggleScreenSharing())} className={cn("hidden md:flex h-9 w-9 rounded-full items-center justify-center transition-colors", currentCall?.isScreenSharing ? "bg-blue-600" : "bg-white/20 hover:bg-white/30")} title={currentCall?.isScreenSharing ? "Stop Sharing" : "Share Screen"}>
+                            {currentCall?.isScreenSharing ? <MonitorOff className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
+                          </button>
+                          <button onClick={toggleSpeakerMute} className={cn("h-11 w-11 md:h-9 md:w-9 rounded-full flex items-center justify-center transition-colors", isSpeakerMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30")}>
+                            {isSpeakerMuted ? <VolumeX className="h-5 w-5 md:h-4 md:w-4" /> : <Volume2 className="h-5 w-5 md:h-4 md:w-4" />}
+                          </button>
+                          <button onClick={() => dispatch(toggleMute())} className={cn("h-11 w-11 md:h-9 md:w-9 rounded-full flex items-center justify-center transition-colors", currentCall?.isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30")}>
+                            {currentCall?.isMuted ? <MicOff className="h-5 w-5 md:h-4 md:w-4" /> : <Mic className="h-5 w-5 md:h-4 md:w-4" />}
+                          </button>
+                          <button onClick={handleEndCall} className="h-14 w-14 md:h-9 md:w-9 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors shadow-lg shadow-red-500/30">
+                            <PhoneOff className="h-6 w-6 md:h-4 md:w-4" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </motion.div>
@@ -962,20 +966,56 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
             {/* Message Area */}
             {!isCallActive || !isVideoCall ? (
               <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3">
-                {messages.map((msg) => (
+                {messages.map((msg) => {
+                  const senderRole = msg.sender?.role?.name;
+                  const isAdmin = senderRole === 'admin' || senderRole === 'super_admin';
+                  const isFira = senderRole === 'system_agent';
+                  const isSystemMsg = isAdmin || isFira;
+                  const mine = isMyMessage(msg);
+
+                  const systemLabel = isAdmin ? 'Service Manager' : 'Fira (AI)';
+
+                  if (isSystemMsg) {
+                    return (
+                      <motion.div
+                        key={msg.id}
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        className="flex flex-col items-center max-w-[85%] md:max-w-[70%] mx-auto"
+                      >
+                        <span className={cn(
+                          "text-[10px] font-bold mb-1 px-2",
+                          isAdmin ? "text-indigo-500" : "text-purple-500"
+                        )}>{systemLabel}</span>
+                        <div className={cn(
+                          "p-3 rounded-2xl text-sm shadow-sm w-full text-center",
+                          isAdmin
+                            ? "bg-indigo-600 text-white"
+                            : "bg-purple-600 text-white"
+                        )}>
+                          {msg.content}
+                          <div className="text-[10px] font-medium text-right mt-1 -mb-1 opacity-60">
+                            {formatTime(msg.createdAt)}
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  }
+
+                  return (
                   <motion.div
                     key={msg.id}
                     initial={{ opacity: 0, scale: 0.95, y: 10 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     className={cn(
                       "max-w-[85%] md:max-w-[70%]",
-                      isMyMessage(msg) ? "ml-auto" : "mr-auto"
+                      mine ? "ml-auto" : "mr-auto"
                     )}
                   >
                     <div
                       className={cn(
                         "p-3 rounded-2xl text-sm shadow-sm",
-                        isMyMessage(msg)
+                        mine
                           ? "bg-[#1C8AFF] text-white rounded-tr-none"
                           : "bg-white text-slate-700 rounded-tl-none border border-slate-100"
                       )}
@@ -990,7 +1030,7 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                           />
                           <p className={cn(
                             "text-xs truncate mt-1",
-                            isMyMessage(msg) ? "text-blue-100" : "text-slate-400"
+                            mine ? "text-blue-100" : "text-slate-400"
                           )}>{msg.fileName || 'Image'}</p>
                         </a>
                       ) : msg.messageType === 'document' && msg.fileUrl ? (
@@ -1001,35 +1041,35 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                           rel="noopener noreferrer"
                           className={cn(
                             "flex items-center gap-3 p-2.5 rounded-xl transition-colors",
-                            isMyMessage(msg)
+                            mine
                               ? "bg-white/15 hover:bg-white/25"
                               : "bg-slate-50 hover:bg-slate-100 border border-slate-100"
                           )}
                         >
                           <div className={cn(
                             "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
-                            isMyMessage(msg) ? "bg-white/20" : "bg-indigo-50"
+                            mine ? "bg-white/20" : "bg-indigo-50"
                           )}>
                             <FileText className={cn(
                               "h-5 w-5",
-                              isMyMessage(msg) ? "text-white" : "text-indigo-500"
+                              mine ? "text-white" : "text-indigo-500"
                             )} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className={cn(
                               "text-sm font-medium truncate",
-                              isMyMessage(msg) ? "text-white" : "text-slate-800"
+                              mine ? "text-white" : "text-slate-800"
                             )}>{msg.fileName || 'File'}</p>
                             {msg.fileSize && (
                               <p className={cn(
                                 "text-[10px]",
-                                isMyMessage(msg) ? "text-blue-200" : "text-slate-400"
+                                mine ? "text-blue-200" : "text-slate-400"
                               )}>{formatFileSize(msg.fileSize)}</p>
                             )}
                           </div>
                           <Download className={cn(
                             "h-4 w-4 shrink-0",
-                            isMyMessage(msg) ? "text-white/70" : "text-indigo-400"
+                            mine ? "text-white/70" : "text-indigo-400"
                           )} />
                         </a>
                       ) : (
@@ -1038,12 +1078,12 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                       )}
                       <div className={cn(
                         "flex flex-row items-center justify-end gap-1 mt-1 -mb-1",
-                        isMyMessage(msg) ? "text-blue-100" : "text-slate-400"
+                        mine ? "text-blue-100" : "text-slate-400"
                       )}>
                         <div className="text-[10px] font-medium text-right">
                           {formatTime(msg.createdAt)}
                         </div>
-                        {isMyMessage(msg) && (
+                        {mine && (
                           msg.isRead ?
                             <CheckCheck className="w-3.5 h-3.5 text-blue-200" /> :
                             <Check className="w-3.5 h-3.5 text-blue-200/70" />
@@ -1051,7 +1091,8 @@ export function ChatContainer({ bookingId, joined, incomingCallType }: ChatConta
                       </div>
                     </div>
                   </motion.div>
-                ))}
+                  );
+                })}
 
                 {messages.length === 0 && (
                   <div className="pt-4 flex flex-col items-center justify-center text-center opacity-40 h-full">

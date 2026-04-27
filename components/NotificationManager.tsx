@@ -191,7 +191,7 @@ export function NotificationManager() {
             });
           } else if (data.type === "booking_request") {
             // Show toast for new booking update
-            toast.info("New Booking Update", {
+            toast.info("Incoming Booking", {
               description: data.message || "A new order is available in your area.",
               icon: <Bell className="h-4 w-4 text-[#1C8AFF]" />,
             });

@@ -6,6 +6,7 @@ import { RootState, AppDispatch } from "@/lib/store/store";
 import { setCallStatus, updateCallDetails, resetCall } from "@/lib/store/slices/callSlice";
 import { toast } from "sonner";
 import { agoraApi } from "@/lib/api/agora";
+import { API_BASE_URL } from "@/lib/api/client";
 
 // Singleton to hold tracks globally
 let globalLocalAudioTrack: any = null;
@@ -56,6 +57,25 @@ export function CallManager() {
             if (activeCallPollRef.current) clearInterval(activeCallPollRef.current);
         };
     }, [currentCall?.status, currentCall?.agoraToken]);
+
+    // End call on page unload/refresh so the other side isn't left in a stale session
+    useEffect(() => {
+        const handleBeforeUnload = () => {
+            if (currentCall?.status === "active" && currentCall.bookingId) {
+                const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+                const url = `${API_BASE_URL}/agora/call/${currentCall.bookingId}/reject`;
+                const headers: Record<string, string> = { "Content-Type": "application/json" };
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+                try {
+                    navigator.sendBeacon(url, new Blob([JSON.stringify({})], { type: "application/json" }));
+                } catch {
+                    fetch(url, { method: "POST", headers, keepalive: true }).catch(() => {});
+                }
+            }
+        };
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    }, [currentCall?.status, currentCall?.bookingId]);
 
     const joinChannel = async () => {
         if (!currentCall || !currentCall.agoraAppId || !currentCall.agoraToken || !currentCall.agoraChannel) return;

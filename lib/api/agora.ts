@@ -11,6 +11,7 @@ export interface ChatMessage {
     id: string;
     firstName: string;
     lastName: string;
+    role?: { name: string };
   };
   isRead?: boolean;
   fileUrl?: string;

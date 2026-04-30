@@ -20,6 +20,7 @@ interface CallInfo {
     remoteUid?: number | null;
     isScreenSharing: boolean;
     remoteVideoVersion?: number;
+    adminInAudio?: boolean;
 }
 
 interface GlobalCallState {

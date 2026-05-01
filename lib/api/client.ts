@@ -1,5 +1,5 @@
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+  process.env.NEXT_PUBLIC_API_URL || "https://api.aipe.club";
 
 interface FetchOptions extends RequestInit {
   headers?: Record<string, string>;
